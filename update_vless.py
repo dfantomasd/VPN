@@ -19,18 +19,19 @@ ROUTING_PROFILE = {
     "Name": "Dmitry RU Direct",
     "GlobalProxy": "true",
     "UseChunkFiles": "true",
-    "RemoteDns": "8.8.8.8",
+    "RemoteDns": "1.1.1.1",
     "DomesticDns": "77.88.8.8",
     "RemoteDNSType": "DoH",
-    "RemoteDNSDomain": "https://8.8.8.8/dns-query",
-    "RemoteDNSIP": "8.8.8.8",
-    "DomesticDNSType": "DoH",
-    "DomesticDNSDomain": "https://77.88.8.8/dns-query",
+    "RemoteDNSDomain": "https://cloudflare-dns.com/dns-query",
+    "RemoteDNSIP": "1.1.1.1",
+    "DomesticDNSType": "DoU",
+    "DomesticDNSDomain": "",
     "DomesticDNSIP": "77.88.8.8",
     "Geositeurl": "https://cdn.jsdelivr.net/gh/b-n-m-n/happ-routing@main/release/geosite.dat",
     "Geoipurl": "https://cdn.jsdelivr.net/gh/b-n-m-n/happ-routing@main/release/geoip.dat",
     "LastUpdated": "",
     "DnsHosts": {
+        "cloudflare-dns.com": "1.1.1.1",
         "lkfl2.nalog.ru": "213.24.64.175",
         "lknpd.nalog.ru": "213.24.64.181"
     },
@@ -120,7 +121,7 @@ ROUTING_PROFILE = {
 }
 
 def fetch_json(url, timeout=30):
-    req = urllib.request.Request(url, headers={"User-Agent": "happ-subscription-builder/8.3"})
+    req = urllib.request.Request(url, headers={"User-Agent": "happ-subscription-builder/8.4"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.load(r)
 
