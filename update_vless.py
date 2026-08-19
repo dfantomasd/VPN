@@ -89,7 +89,14 @@ def main():
             if lat is not None: tested.append((lat,fs[f]))
     tested.sort(key=lambda x:x[0]); selected=tested[:LIMIT]
     if not selected: raise SystemExit("No reachable VLESS endpoints found")
-    lines=[routing_link(),"#subscriptions-sort-type: ping","#profile-title: Fast VPN"]
+    lines=[
+        routing_link(),
+        "#profile-update-interval: 1",
+        "#subscription-auto-update-open-enable: 1",
+        "#subscription-ping-onopen-enabled: 1",
+        "#subscriptions-sort-type: ping",
+        "#profile-title: Fast VPN",
+    ]
     for n,(lat,item) in enumerate(selected,1):
         g=geo_for_ip(item["address"])
         loc=g["country"]+(f" · {g['city']}" if g["city"] else "")
