@@ -1,18 +1,28 @@
 #!/usr/bin/env python3
-import base64, json, os, urllib.request
+import base64
+import json
+import os
+import socket
+import statistics
+import time
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import quote
 
 SOURCE_URL = "https://raw.githubusercontent.com/kenkaral45/happ-subscription/main/whitelist_configs_combined.json"
-LIMIT = int(os.getenv("VLESS_LIMIT", "50"))
+LIMIT = int(os.getenv("VLESS_LIMIT", "10"))
+PING_TIMEOUT = float(os.getenv("PING_TIMEOUT", "1.8"))
+PING_ATTEMPTS = int(os.getenv("PING_ATTEMPTS", "2"))
+MAX_WORKERS = int(os.getenv("MAX_WORKERS", "24"))
 
 
 def fetch_json(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "happ-subscription-builder/1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "happ-subscription-builder/2.0"})
     with urllib.request.urlopen(req, timeout=30) as r:
         return json.load(r)
 
 
-def build_vless(outbound):
+def parse_vless(outbound):
     if outbound.get("protocol") != "vless":
         return None
     settings = outbound.get("settings") or {}
@@ -34,6 +44,7 @@ def build_vless(outbound):
     reality = stream.get("realitySettings") or {}
     network = stream.get("network") or "tcp"
     security = stream.get("security") or "none"
+
     params = [
         ("encryption", user.get("encryption") or "none"),
         ("type", network),
@@ -55,9 +66,26 @@ def build_vless(outbound):
     if sid is not None:
         params.append(("sid", sid))
 
-    query = "&".join(f"{quote(str(k), safe='')}={quote(str(v), safe='-_~.')}" for k, v in params)
-    name = quote(f"{address}:{port}", safe='')
-    return f"vless://{uid}@{address}:{port}?{query}#{name}"
+    query = "&".join(
+        f"{quote(str(k), safe='')}={quote(str(v), safe='-_~.')}" for k, v in params
+    )
+    name = quote(f"{address}:{port}", safe="")
+    link = f"vless://{uid}@{address}:{port}?{query}#{name}"
+    return {"address": address, "port": int(port), "link": link}
+
+
+def tcp_latency_ms(address, port):
+    samples = []
+    for _ in range(PING_ATTEMPTS):
+        started = time.perf_counter()
+        try:
+            with socket.create_connection((address, port), timeout=PING_TIMEOUT):
+                samples.append((time.perf_counter() - started) * 1000)
+        except OSError:
+            pass
+    if not samples:
+        return None
+    return statistics.median(samples)
 
 
 def main():
@@ -65,29 +93,56 @@ def main():
     if isinstance(data, dict):
         data = [data]
 
-    links, seen = [], set()
+    candidates = []
+    seen = set()
     for cfg in data:
         for outbound in (cfg.get("outbounds") or []):
-            link = build_vless(outbound)
-            if not link or link in seen:
+            item = parse_vless(outbound)
+            if not item:
                 continue
-            seen.add(link)
-            links.append(link)
-            if len(links) >= LIMIT:
-                break
-        if len(links) >= LIMIT:
-            break
+            key = (item["address"], item["port"], item["link"])
+            if key in seen:
+                continue
+            seen.add(key)
+            candidates.append(item)
 
-    if not links:
+    if not candidates:
         raise SystemExit("No VLESS links found in source JSON")
 
-    plain = "\n".join(links) + "\n"
+    tested = []
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        futures = {
+            pool.submit(tcp_latency_ms, item["address"], item["port"]): item
+            for item in candidates
+        }
+        for future in as_completed(futures):
+            item = futures[future]
+            latency = future.result()
+            if latency is not None:
+                tested.append((latency, item))
+
+    if not tested:
+        raise SystemExit("No reachable VLESS endpoints found")
+
+    tested.sort(key=lambda x: x[0])
+    selected = tested[:LIMIT]
+
+    # Happ understands this directive and will additionally sort the imported
+    # servers by latency measured on the user's own device.
+    lines = ["#subscriptions-sort-type: ping"]
+    for latency, item in selected:
+        lines.append(item["link"])
+        print(f"{latency:7.1f} ms  {item['address']}:{item['port']}")
+
+    plain = "\n".join(lines) + "\n"
     with open("vless.txt", "w", encoding="utf-8") as f:
         f.write(plain)
+
     encoded = base64.b64encode(plain.encode()).decode()
     with open("vless_base64.txt", "w", encoding="utf-8") as f:
         f.write(encoded + "\n")
-    print(f"Generated {len(links)} unique VLESS links")
+
+    print(f"Selected {len(selected)} fastest reachable servers from {len(candidates)} candidates")
 
 
 if __name__ == "__main__":
