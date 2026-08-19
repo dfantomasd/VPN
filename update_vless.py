@@ -97,13 +97,13 @@ def main():
         "#subscriptions-sort-type: ping",
         "#profile-title: Fast VPN",
     ]
-    for n,(lat,item) in enumerate(selected,1):
+    for lat,item in selected:
         g=geo_for_ip(item["address"])
         loc=g["country"]+(f" · {g['city']}" if g["city"] else "")
-        label=f"{g['flag']} {loc} · #{n}"
+        label=f"{g['flag']} {loc}"
         lines.append(f"{item['base']}#{quote(label,safe='')}")
     plain="\n".join(lines)+"\n"
     open("vless.txt","w",encoding="utf-8").write(plain)
     open("vless_base64.txt","w",encoding="utf-8").write(base64.b64encode(plain.encode()).decode()+"\n")
-    print(f"Selected {len(selected)} servers; routing embedded")
+    print(f"Selected {len(selected)} servers; Happ will ping and sort them on device")
 if __name__=="__main__": main()
