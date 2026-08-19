@@ -20,7 +20,7 @@ jobs:
 
       - name: Generate subscription
         env:
-          VLESS_LIMIT: "15"
+          VLESS_LIMIT: "10"
         run: python3 update_vless.py
 
       - name: Commit changes
