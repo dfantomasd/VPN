@@ -91,8 +91,10 @@ def main():
     if not selected: raise SystemExit("No reachable VLESS endpoints found")
     lines=[routing_link(),"#subscriptions-sort-type: ping","#profile-title: Fast VPN"]
     for n,(lat,item) in enumerate(selected,1):
-        g=geo_for_ip(item["address"]); loc=g["country"]+(f" · {g['city']}" if g["city"] else "")
-        lines.append(f"{item['base']}#{quote(f'{g[\"flag\"]} {loc} · #{n}',safe='')}")
+        g=geo_for_ip(item["address"])
+        loc=g["country"]+(f" · {g['city']}" if g["city"] else "")
+        label=f"{g['flag']} {loc} · #{n}"
+        lines.append(f"{item['base']}#{quote(label,safe='')}")
     plain="\n".join(lines)+"\n"
     open("vless.txt","w",encoding="utf-8").write(plain)
     open("vless_base64.txt","w",encoding="utf-8").write(base64.b64encode(plain.encode()).decode()+"\n")
