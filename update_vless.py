@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-import base64
-import json
-import os
-import socket
-import statistics
-import time
-import urllib.request
+import base64, json, os, socket, statistics, time, urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import quote
 
@@ -15,163 +9,92 @@ PING_TIMEOUT = float(os.getenv("PING_TIMEOUT", "1.8"))
 PING_ATTEMPTS = int(os.getenv("PING_ATTEMPTS", "2"))
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", "24"))
 
+ROUTING_PROFILE = {
+  "Name": "Dmitry RU Direct",
+  "GlobalProxy": "true",
+  "UseChunkFiles": "true",
+  "RemoteDns": "8.8.8.8",
+  "DomesticDns": "77.88.8.8",
+  "RemoteDNSType": "DoH",
+  "RemoteDNSDomain": "https://8.8.8.8/dns-query",
+  "RemoteDNSIP": "8.8.8.8",
+  "DomesticDNSType": "DoH",
+  "DomesticDNSDomain": "https://77.88.8.8/dns-query",
+  "DomesticDNSIP": "77.88.8.8",
+  "Geositeurl": "https://cdn.jsdelivr.net/gh/b-n-m-n/happ-routing@main/release/geosite.dat",
+  "Geoipurl": "https://cdn.jsdelivr.net/gh/b-n-m-n/happ-routing@main/release/geoip.dat",
+  "LastUpdated": "",
+  "DnsHosts": {"lkfl2.nalog.ru": "213.24.64.175", "lknpd.nalog.ru": "213.24.64.181"},
+  "RouteOrder": "block-proxy-direct",
+  "DirectSites": ["geosite:private","geosite:russia-inside","geosite:category-ru","geosite:whitelist","geosite:microsoft","geosite:apple","geosite:epicgames","geosite:riot","geosite:escapefromtarkov","geosite:steam","geosite:twitch","geosite:pinterest","geosite:faceit"],
+  "DirectIp": ["geoip:private","geoip:direct","geoip:russia-inside"],
+  "ProxySites": ["geosite:google-play","geosite:github","geosite:twitch-ads","geosite:youtube","geosite:telegram"],
+  "ProxyIp": [], "BlockSites": [], "BlockIp": [],
+  "DomainStrategy": "IPIfNonMatch", "FakeDNS": "false"
+}
 
 def fetch_json(url, timeout=30):
-    req = urllib.request.Request(url, headers={"User-Agent": "happ-subscription-builder/3.0"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.load(r)
-
+    req = urllib.request.Request(url, headers={"User-Agent": "happ-subscription-builder/4.0"})
+    with urllib.request.urlopen(req, timeout=timeout) as r: return json.load(r)
 
 def country_flag(code):
-    code = (code or "").upper()
-    if len(code) != 2 or not code.isalpha():
-        return "🌐"
-    return "".join(chr(127397 + ord(ch)) for ch in code)
-
+    code=(code or "").upper()
+    return "".join(chr(127397+ord(ch)) for ch in code) if len(code)==2 and code.isalpha() else "🌐"
 
 def geo_for_ip(ip):
     try:
-        data = fetch_json(f"https://ipwho.is/{ip}", timeout=8)
-        if data.get("success") is False:
-            raise ValueError("lookup failed")
-        code = (data.get("country_code") or "").upper()
-        country = data.get("country") or "Unknown"
-        city = data.get("city") or ""
-        return {
-            "code": code,
-            "country": country,
-            "city": city,
-            "flag": country_flag(code),
-        }
-    except Exception:
-        return {"code": "", "country": "Unknown", "city": "", "flag": "🌐"}
+        d=fetch_json(f"https://ipwho.is/{ip}",8); code=(d.get("country_code") or "").upper()
+        return {"country":d.get("country") or "Unknown","city":d.get("city") or "","flag":country_flag(code)}
+    except Exception: return {"country":"Unknown","city":"","flag":"🌐"}
 
+def parse_vless(o):
+    if o.get("protocol")!="vless": return None
+    v=(o.get("settings") or {}).get("vnext") or []
+    if not v or not (v[0].get("users") or []): return None
+    s=v[0]; u=s["users"][0]; a=s.get("address"); p=s.get("port"); uid=u.get("id")
+    if not all([a,p,uid]): return None
+    st=o.get("streamSettings") or {}; r=st.get("realitySettings") or {}
+    params=[("encryption",u.get("encryption") or "none"),("type",st.get("network") or "tcp"),("security",st.get("security") or "none")]
+    for k,val in [("flow",u.get("flow")),("sni",r.get("serverName")),("fp",r.get("fingerprint")),("pbk",r.get("publicKey")),("sid",r.get("shortId"))]:
+        if val is not None and val!="": params.append((k,val))
+    q="&".join(f"{quote(str(k))}={quote(str(v),safe='-_~.')}" for k,v in params)
+    return {"address":a,"port":int(p),"base":f"vless://{uid}@{a}:{p}?{q}"}
 
-def parse_vless(outbound):
-    if outbound.get("protocol") != "vless":
-        return None
-    settings = outbound.get("settings") or {}
-    vnext = settings.get("vnext") or []
-    if not vnext:
-        return None
-    server = vnext[0]
-    users = server.get("users") or []
-    if not users:
-        return None
-    user = users[0]
-    address = server.get("address")
-    port = server.get("port")
-    uid = user.get("id")
-    if not all([address, port, uid]):
-        return None
-
-    stream = outbound.get("streamSettings") or {}
-    reality = stream.get("realitySettings") or {}
-    network = stream.get("network") or "tcp"
-    security = stream.get("security") or "none"
-
-    params = [
-        ("encryption", user.get("encryption") or "none"),
-        ("type", network),
-        ("security", security),
-    ]
-    flow = user.get("flow")
-    if flow:
-        params.append(("flow", flow))
-    sni = reality.get("serverName")
-    pbk = reality.get("publicKey")
-    sid = reality.get("shortId")
-    fp = reality.get("fingerprint")
-    if sni:
-        params.append(("sni", sni))
-    if fp:
-        params.append(("fp", fp))
-    if pbk:
-        params.append(("pbk", pbk))
-    if sid is not None:
-        params.append(("sid", sid))
-
-    query = "&".join(
-        f"{quote(str(k), safe='')}={quote(str(v), safe='-_~.')}" for k, v in params
-    )
-    base = f"vless://{uid}@{address}:{port}?{query}"
-    return {"address": address, "port": int(port), "base": base}
-
-
-def tcp_latency_ms(address, port):
-    samples = []
+def tcp_latency_ms(a,p):
+    x=[]
     for _ in range(PING_ATTEMPTS):
-        started = time.perf_counter()
+        t=time.perf_counter()
         try:
-            with socket.create_connection((address, port), timeout=PING_TIMEOUT):
-                samples.append((time.perf_counter() - started) * 1000)
-        except OSError:
-            pass
-    if not samples:
-        return None
-    return statistics.median(samples)
+            with socket.create_connection((a,p),timeout=PING_TIMEOUT): x.append((time.perf_counter()-t)*1000)
+        except OSError: pass
+    return statistics.median(x) if x else None
 
+def routing_link():
+    raw=json.dumps(ROUTING_PROFILE,ensure_ascii=False,separators=(",",":")).encode()
+    return "happ://routing/onadd/"+base64.b64encode(raw).decode()
 
 def main():
-    data = fetch_json(SOURCE_URL)
-    if isinstance(data, dict):
-        data = [data]
-
-    candidates = []
-    seen = set()
+    data=fetch_json(SOURCE_URL); data=[data] if isinstance(data,dict) else data
+    candidates=[]; seen=set()
     for cfg in data:
-        for outbound in (cfg.get("outbounds") or []):
-            item = parse_vless(outbound)
-            if not item:
-                continue
-            key = (item["address"], item["port"], item["base"])
-            if key in seen:
-                continue
-            seen.add(key)
-            candidates.append(item)
-
-    if not candidates:
-        raise SystemExit("No VLESS links found in source JSON")
-
-    tested = []
+        for o in (cfg.get("outbounds") or []):
+            item=parse_vless(o)
+            if item and (item["address"],item["port"],item["base"]) not in seen:
+                seen.add((item["address"],item["port"],item["base"])); candidates.append(item)
+    tested=[]
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-        futures = {
-            pool.submit(tcp_latency_ms, item["address"], item["port"]): item
-            for item in candidates
-        }
-        for future in as_completed(futures):
-            item = futures[future]
-            latency = future.result()
-            if latency is not None:
-                tested.append((latency, item))
-
-    if not tested:
-        raise SystemExit("No reachable VLESS endpoints found")
-
-    tested.sort(key=lambda x: x[0])
-    selected = tested[:LIMIT]
-
-    lines = ["#subscriptions-sort-type: ping", "#profile-title: Fast VPN"]
-    for index, (latency, item) in enumerate(selected, start=1):
-        geo = geo_for_ip(item["address"])
-        location = geo["country"]
-        if geo["city"]:
-            location = f"{location} · {geo['city']}"
-        title = f"{geo['flag']} {location} · #{index}"
-        link = f"{item['base']}#{quote(title, safe='')}"
-        lines.append(link)
-        print(f"{latency:7.1f} ms  {geo['flag']} {geo['country']}  {item['address']}:{item['port']}")
-
-    plain = "\n".join(lines) + "\n"
-    with open("vless.txt", "w", encoding="utf-8") as f:
-        f.write(plain)
-
-    encoded = base64.b64encode(plain.encode()).decode()
-    with open("vless_base64.txt", "w", encoding="utf-8") as f:
-        f.write(encoded + "\n")
-
-    print(f"Selected {len(selected)} fastest reachable servers from {len(candidates)} candidates")
-
-
-if __name__ == "__main__":
-    main()
+        fs={pool.submit(tcp_latency_ms,i["address"],i["port"]):i for i in candidates}
+        for f in as_completed(fs):
+            lat=f.result()
+            if lat is not None: tested.append((lat,fs[f]))
+    tested.sort(key=lambda x:x[0]); selected=tested[:LIMIT]
+    if not selected: raise SystemExit("No reachable VLESS endpoints found")
+    lines=[routing_link(),"#subscriptions-sort-type: ping","#profile-title: Fast VPN"]
+    for n,(lat,item) in enumerate(selected,1):
+        g=geo_for_ip(item["address"]); loc=g["country"]+(f" · {g['city']}" if g["city"] else "")
+        lines.append(f"{item['base']}#{quote(f'{g[\"flag\"]} {loc} · #{n}',safe='')}")
+    plain="\n".join(lines)+"\n"
+    open("vless.txt","w",encoding="utf-8").write(plain)
+    open("vless_base64.txt","w",encoding="utf-8").write(base64.b64encode(plain.encode()).decode()+"\n")
+    print(f"Selected {len(selected)} servers; routing embedded")
+if __name__=="__main__": main()
