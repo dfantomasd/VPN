@@ -15,24 +15,22 @@ PING_TIMEOUT = float(os.getenv("PING_TIMEOUT", "1.8"))
 PING_ATTEMPTS = int(os.getenv("PING_ATTEMPTS", "2"))
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", "24"))
 
-# Seamless always-on profile:
-# - Russian services and their CDN/API domains go DIRECT.
-# - Telegram/YouTube/GitHub and other unmatched traffic go through VPN.
 ROUTING_PROFILE = {
     "Name": "Dmitry RU Direct",
     "GlobalProxy": "true",
     "UseChunkFiles": "true",
+    "RemoteDns": "8.8.8.8",
+    "DomesticDns": "77.88.8.8",
     "RemoteDNSType": "DoH",
-    "RemoteDNSDomain": "https://cloudflare-dns.com/dns-query",
-    "RemoteDNSIP": "1.1.1.1",
-    "DomesticDNSType": "DoU",
-    "DomesticDNSDomain": "",
+    "RemoteDNSDomain": "https://8.8.8.8/dns-query",
+    "RemoteDNSIP": "8.8.8.8",
+    "DomesticDNSType": "DoH",
+    "DomesticDNSDomain": "https://77.88.8.8/dns-query",
     "DomesticDNSIP": "77.88.8.8",
     "Geositeurl": "https://cdn.jsdelivr.net/gh/b-n-m-n/happ-routing@main/release/geosite.dat",
     "Geoipurl": "https://cdn.jsdelivr.net/gh/b-n-m-n/happ-routing@main/release/geoip.dat",
     "LastUpdated": "",
     "DnsHosts": {
-        "cloudflare-dns.com": "1.1.1.1",
         "lkfl2.nalog.ru": "213.24.64.175",
         "lknpd.nalog.ru": "213.24.64.181"
     },
@@ -40,7 +38,6 @@ ROUTING_PROFILE = {
     "DirectSites": [
         "domain:ru",
         "domain:xn--p1ai",
-
         "domain:gosuslugi.ru",
         "domain:gu-st.ru",
         "domain:esia.gosuslugi.ru",
@@ -50,7 +47,6 @@ ROUTING_PROFILE = {
         "domain:gov.ru",
         "domain:mos.ru",
         "domain:mosreg.ru",
-
         "domain:ozon.ru",
         "domain:api.ozon.ru",
         "domain:ozone.ru",
@@ -66,23 +62,19 @@ ROUTING_PROFILE = {
         "domain:o3team.ru",
         "domain:o-courier.ru",
         "domain:ocourier.ru",
-
         "domain:wildberries.ru",
         "domain:wb.ru",
         "domain:wbbasket.ru",
-
         "domain:max.ru",
         "domain:vk.com",
         "domain:vk.ru",
         "domain:userapi.com",
         "domain:mail.ru",
-
         "domain:yandex.ru",
         "domain:yandex.net",
         "domain:yastatic.net",
         "domain:ya.ru",
         "domain:kinopoisk.ru",
-
         "domain:sberbank.ru",
         "domain:sber.ru",
         "domain:sbrf.ru",
@@ -99,7 +91,6 @@ ROUTING_PROFILE = {
         "domain:sovcombank.ru",
         "domain:mironline.ru",
         "domain:nspk.ru",
-
         "geosite:private",
         "geosite:russia-inside",
         "geosite:category-ru",
@@ -109,11 +100,13 @@ ROUTING_PROFILE = {
     ],
     "DirectIp": [
         "geoip:private",
+        "geoip:direct",
         "geoip:russia-inside"
     ],
     "ProxySites": [
         "geosite:google-play",
         "geosite:github",
+        "geosite:twitch-ads",
         "geosite:youtube",
         "geosite:telegram",
         "geosite:twitch",
@@ -127,7 +120,7 @@ ROUTING_PROFILE = {
 }
 
 def fetch_json(url, timeout=30):
-    req = urllib.request.Request(url, headers={"User-Agent": "happ-subscription-builder/8.2"})
+    req = urllib.request.Request(url, headers={"User-Agent": "happ-subscription-builder/8.3"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.load(r)
 
@@ -180,7 +173,6 @@ def main():
             if item and item["base"] not in seen:
                 seen.add(item["base"]); candidates.append(item)
     if not candidates: raise SystemExit("No VLESS Reality candidates")
-
     reachable=[]
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
         fs={pool.submit(tcp_latency_ms,i["address"],i["port"]):i for i in candidates}
@@ -189,7 +181,6 @@ def main():
             except Exception: continue
             if lat is not None: reachable.append((lat,fs[f]))
     reachable.sort(key=lambda x:x[0])
-
     selected=[]
     for lat,item in reachable[:80]:
         g=geo_for_ip(item["address"])
@@ -197,16 +188,7 @@ def main():
         selected.append((lat,item,g))
         if len(selected) >= LIMIT: break
     if not selected: raise SystemExit("No suitable reachable VLESS Reality endpoints")
-
-    lines=[
-        routing_link(),
-        "#routing-enable: 1",
-        "#profile-update-interval: 2",
-        "#subscription-auto-update-open-enable: 1",
-        "#subscription-ping-onopen-enabled: 1",
-        "#subscriptions-sort-type: ping",
-        "#profile-title: Fast VPN"
-    ]
+    lines=[routing_link(),"#routing-enable: 1","#profile-update-interval: 2","#subscription-auto-update-open-enable: 1","#subscription-ping-onopen-enabled: 1","#subscriptions-sort-type: ping","#profile-title: Fast VPN"]
     for lat,item,g in selected:
         loc=g["country"]+(f" · {g['city']}" if g["city"] else "")
         label=f"{g['flag']} {loc}"
