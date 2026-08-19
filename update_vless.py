@@ -15,30 +15,59 @@ PING_TIMEOUT = float(os.getenv("PING_TIMEOUT", "1.8"))
 PING_ATTEMPTS = int(os.getenv("PING_ATTEMPTS", "2"))
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", "24"))
 
+# Seamless always-on profile:
+# - Russian sites/IPs and Apple/Microsoft infrastructure go DIRECT.
+# - Telegram/YouTube/GitHub and other unmatched traffic go through VPN.
 ROUTING_PROFILE = {
     "Name": "Dmitry RU Direct",
     "GlobalProxy": "true",
     "UseChunkFiles": "true",
     "RemoteDNSType": "DoH",
-    "RemoteDNSDomain": "https://8.8.8.8/dns-query",
-    "RemoteDNSIP": "8.8.8.8",
-    "DomesticDNSType": "DoH",
-    "DomesticDNSDomain": "https://77.88.8.8/dns-query",
+    "RemoteDNSDomain": "https://cloudflare-dns.com/dns-query",
+    "RemoteDNSIP": "1.1.1.1",
+    "DomesticDNSType": "DoU",
+    "DomesticDNSDomain": "",
     "DomesticDNSIP": "77.88.8.8",
     "Geositeurl": "https://cdn.jsdelivr.net/gh/b-n-m-n/happ-routing@main/release/geosite.dat",
     "Geoipurl": "https://cdn.jsdelivr.net/gh/b-n-m-n/happ-routing@main/release/geoip.dat",
     "LastUpdated": "",
-    "DnsHosts": {"lkfl2.nalog.ru": "213.24.64.175", "lknpd.nalog.ru": "213.24.64.181"},
+    "DnsHosts": {
+        "cloudflare-dns.com": "1.1.1.1",
+        "lkfl2.nalog.ru": "213.24.64.175",
+        "lknpd.nalog.ru": "213.24.64.181"
+    },
     "RouteOrder": "block-proxy-direct",
-    "DirectSites": ["geosite:private", "geosite:russia-inside", "geosite:category-ru", "geosite:whitelist"],
-    "DirectIp": ["geoip:private", "geoip:russia-inside"],
-    "ProxySites": ["geosite:google-play", "geosite:github", "geosite:youtube", "geosite:telegram", "geosite:twitch", "geosite:pinterest"],
-    "ProxyIp": [], "BlockSites": [], "BlockIp": [],
-    "DomainStrategy": "IPIfNonMatch", "FakeDNS": "false"
+    "DirectSites": [
+        "domain:ru",
+        "domain:xn--p1ai",
+        "geosite:private",
+        "geosite:russia-inside",
+        "geosite:category-ru",
+        "geosite:whitelist",
+        "geosite:apple",
+        "geosite:microsoft"
+    ],
+    "DirectIp": [
+        "geoip:private",
+        "geoip:russia-inside"
+    ],
+    "ProxySites": [
+        "geosite:google-play",
+        "geosite:github",
+        "geosite:youtube",
+        "geosite:telegram",
+        "geosite:twitch",
+        "geosite:pinterest"
+    ],
+    "ProxyIp": [],
+    "BlockSites": [],
+    "BlockIp": [],
+    "DomainStrategy": "IPIfNonMatch",
+    "FakeDNS": "false"
 }
 
 def fetch_json(url, timeout=30):
-    req = urllib.request.Request(url, headers={"User-Agent": "happ-subscription-builder/7.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "happ-subscription-builder/8.0"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.load(r)
 
@@ -62,7 +91,6 @@ def parse_vless(o):
     s=v[0]; u=s["users"][0]; a=s.get("address"); p=s.get("port"); uid=u.get("id")
     if not all([a,p,uid]): return None
     st=o.get("streamSettings") or {}; r=st.get("realitySettings") or {}
-    # Keep only the Reality/Vision-style nodes that were proven to work well in the original source.
     if st.get("security") != "reality" or not r.get("publicKey"): return None
     params=[("encryption",u.get("encryption") or "none"),("type",st.get("network") or "tcp"),("security","reality")]
     for k,val in [("flow",u.get("flow")),("sni",r.get("serverName")),("fp",r.get("fingerprint")),("pbk",r.get("publicKey")),("sid",r.get("shortId"))]:
@@ -103,7 +131,6 @@ def main():
     reachable.sort(key=lambda x:x[0])
 
     selected=[]
-    # Geolocate a wider pool, exclude RU exits, then keep the ten lowest runner-latency nodes.
     for lat,item in reachable[:80]:
         g=geo_for_ip(item["address"])
         if g.get("code") == "RU": continue
@@ -111,7 +138,15 @@ def main():
         if len(selected) >= LIMIT: break
     if not selected: raise SystemExit("No suitable reachable VLESS Reality endpoints")
 
-    lines=[routing_link(),"#routing-enable: 1","#profile-update-interval: 6","#subscription-auto-update-open-enable: 1","#subscription-ping-onopen-enabled: 1","#subscriptions-sort-type: ping","#profile-title: Fast VPN"]
+    lines=[
+        routing_link(),
+        "#routing-enable: 1",
+        "#profile-update-interval: 2",
+        "#subscription-auto-update-open-enable: 1",
+        "#subscription-ping-onopen-enabled: 1",
+        "#subscriptions-sort-type: ping",
+        "#profile-title: Fast VPN"
+    ]
     for lat,item,g in selected:
         loc=g["country"]+(f" · {g['city']}" if g["city"] else "")
         label=f"{g['flag']} {loc}"
