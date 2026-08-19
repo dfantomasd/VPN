@@ -40,6 +40,21 @@ ROUTING_PROFILE = {
     "DirectSites": [
         "domain:ru",
         "domain:xn--p1ai",
+        "domain:gosuslugi.ru",
+        "domain:esia.gosuslugi.ru",
+        "domain:epgu.gosuslugi.ru",
+        "domain:pos.gosuslugi.ru",
+        "domain:nalog.ru",
+        "domain:mos.ru",
+        "domain:mosreg.ru",
+        "domain:max.ru",
+        "domain:vk.com",
+        "domain:vk.ru",
+        "domain:mail.ru",
+        "domain:yandex.ru",
+        "domain:ya.ru",
+        "domain:ozon.ru",
+        "domain:wildberries.ru",
         "geosite:private",
         "geosite:russia-inside",
         "geosite:category-ru",
@@ -67,7 +82,7 @@ ROUTING_PROFILE = {
 }
 
 def fetch_json(url, timeout=30):
-    req = urllib.request.Request(url, headers={"User-Agent": "happ-subscription-builder/8.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "happ-subscription-builder/8.1"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.load(r)
 
