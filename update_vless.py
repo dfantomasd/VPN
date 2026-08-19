@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import quote
 
 SOURCE_URL = "https://raw.githubusercontent.com/kenkaral45/happ-subscription/main/whitelist_configs_combined.json"
+ROUTING_TEMPLATE_FILE = "vless_test_ru_gemini.txt"
 LIMIT = int(os.getenv("VLESS_LIMIT", "10"))
 PING_TIMEOUT = float(os.getenv("PING_TIMEOUT", "1.8"))
 PING_ATTEMPTS = int(os.getenv("PING_ATTEMPTS", "2"))
@@ -17,9 +18,18 @@ MAX_WORKERS = int(os.getenv("MAX_WORKERS", "24"))
 
 
 def fetch_json(url, timeout=30):
-    req = urllib.request.Request(url, headers={"User-Agent": "happ-subscription-builder/9.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "happ-subscription-builder/10.0"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.load(r)
+
+
+def tested_routing_link():
+    """Reuse the exact routing profile already tested successfully on iPhone."""
+    with open(ROUTING_TEMPLATE_FILE, "r", encoding="utf-8") as source:
+        first = source.readline().strip()
+    if not first.startswith("happ://routing/onadd/"):
+        raise SystemExit("Tested routing template is missing or invalid")
+    return first
 
 
 def country_flag(code):
@@ -127,10 +137,11 @@ def main():
     if not selected:
         raise SystemExit("No suitable reachable VLESS Reality endpoints")
 
-    # Routing is deliberately disabled in the subscription. On iOS the embedded
-    # split-routing profile caused Russian apps/banks to lose connectivity.
+    # Routing is intentionally frozen to the profile that was verified on-device.
+    # Scheduled runs only refresh the VLESS nodes and their labels.
     lines = [
-        "#routing-enable: 0",
+        tested_routing_link(),
+        "#routing-enable: 1",
         "#profile-update-interval: 2",
         "#subscription-auto-update-open-enable: 1",
         "#subscription-ping-onopen-enabled: 1",
@@ -148,7 +159,7 @@ def main():
         output.write(plain)
     with open("vless_base64.txt", "w", encoding="utf-8") as output:
         output.write(base64.b64encode(plain.encode()).decode() + "\n")
-    print(f"Selected {len(selected)} stable-source Reality servers; routing disabled")
+    print(f"Selected {len(selected)} Reality servers; tested RU+Gemini routing preserved")
 
 
 if __name__ == "__main__":
