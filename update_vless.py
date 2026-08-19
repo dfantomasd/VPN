@@ -16,10 +16,35 @@ PING_ATTEMPTS = int(os.getenv("PING_ATTEMPTS", "2"))
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", "24"))
 
 
-def fetch_json(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "happ-subscription-builder/2.0"})
-    with urllib.request.urlopen(req, timeout=30) as r:
+def fetch_json(url, timeout=30):
+    req = urllib.request.Request(url, headers={"User-Agent": "happ-subscription-builder/3.0"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.load(r)
+
+
+def country_flag(code):
+    code = (code or "").upper()
+    if len(code) != 2 or not code.isalpha():
+        return "🌐"
+    return "".join(chr(127397 + ord(ch)) for ch in code)
+
+
+def geo_for_ip(ip):
+    try:
+        data = fetch_json(f"https://ipwho.is/{ip}", timeout=8)
+        if data.get("success") is False:
+            raise ValueError("lookup failed")
+        code = (data.get("country_code") or "").upper()
+        country = data.get("country") or "Unknown"
+        city = data.get("city") or ""
+        return {
+            "code": code,
+            "country": country,
+            "city": city,
+            "flag": country_flag(code),
+        }
+    except Exception:
+        return {"code": "", "country": "Unknown", "city": "", "flag": "🌐"}
 
 
 def parse_vless(outbound):
@@ -69,9 +94,8 @@ def parse_vless(outbound):
     query = "&".join(
         f"{quote(str(k), safe='')}={quote(str(v), safe='-_~.')}" for k, v in params
     )
-    name = quote(f"{address}:{port}", safe="")
-    link = f"vless://{uid}@{address}:{port}?{query}#{name}"
-    return {"address": address, "port": int(port), "link": link}
+    base = f"vless://{uid}@{address}:{port}?{query}"
+    return {"address": address, "port": int(port), "base": base}
 
 
 def tcp_latency_ms(address, port):
@@ -100,7 +124,7 @@ def main():
             item = parse_vless(outbound)
             if not item:
                 continue
-            key = (item["address"], item["port"], item["link"])
+            key = (item["address"], item["port"], item["base"])
             if key in seen:
                 continue
             seen.add(key)
@@ -127,12 +151,16 @@ def main():
     tested.sort(key=lambda x: x[0])
     selected = tested[:LIMIT]
 
-    # Happ understands this directive and will additionally sort the imported
-    # servers by latency measured on the user's own device.
-    lines = ["#subscriptions-sort-type: ping"]
-    for latency, item in selected:
-        lines.append(item["link"])
-        print(f"{latency:7.1f} ms  {item['address']}:{item['port']}")
+    lines = ["#subscriptions-sort-type: ping", "#profile-title: Fast VPN"]
+    for index, (latency, item) in enumerate(selected, start=1):
+        geo = geo_for_ip(item["address"])
+        location = geo["country"]
+        if geo["city"]:
+            location = f"{location} · {geo['city']}"
+        title = f"{geo['flag']} {location} · #{index}"
+        link = f"{item['base']}#{quote(title, safe='')}"
+        lines.append(link)
+        print(f"{latency:7.1f} ms  {geo['flag']} {geo['country']}  {item['address']}:{item['port']}")
 
     plain = "\n".join(lines) + "\n"
     with open("vless.txt", "w", encoding="utf-8") as f:
