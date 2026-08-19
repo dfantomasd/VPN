@@ -1,21 +1,47 @@
 #!/usr/bin/env python3
 import base64
+import ipaddress
 import json
 import os
 import socket
 import statistics
 import time
 import urllib.request
+from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
-SOURCE_URL = "https://raw.githubusercontent.com/kenkaral45/happ-subscription/main/whitelist_configs_combined.json"
-LIMIT = int(os.getenv("VLESS_LIMIT", "10"))
+SOURCES = [
+    {
+        "name": "kenkaral45",
+        "kind": "json",
+        "url": "https://raw.githubusercontent.com/kenkaral45/happ-subscription/main/whitelist_configs_combined.json",
+    },
+    {
+        "name": "Freedom-V2Ray",
+        "kind": "text",
+        "url": "https://raw.githubusercontent.com/MahanKenway/Freedom-V2Ray/main/configs/vless.txt",
+    },
+    {
+        "name": "Matin-VLESS",
+        "kind": "text",
+        "url": "https://raw.githubusercontent.com/MatinGhanbari/v2ray-configs/main/subscriptions/filtered/subs/vless.txt",
+    },
+    {
+        "name": "Matin-Super",
+        "kind": "text",
+        "url": "https://raw.githubusercontent.com/MatinGhanbari/v2ray-configs/main/subscriptions/v2ray/super-sub.txt",
+    },
+]
+
+LIMIT = int(os.getenv("VLESS_LIMIT", "15"))
 PING_TIMEOUT = float(os.getenv("PING_TIMEOUT", "1.8"))
 PING_ATTEMPTS = int(os.getenv("PING_ATTEMPTS", "2"))
-MAX_WORKERS = int(os.getenv("MAX_WORKERS", "24"))
+MAX_WORKERS = int(os.getenv("MAX_WORKERS", "32"))
+MAX_PER_SOURCE = int(os.getenv("MAX_PER_SOURCE", "800"))
+MAX_COUNTRY = int(os.getenv("MAX_COUNTRY", "3"))
+MAX_GEO_LOOKUPS = int(os.getenv("MAX_GEO_LOOKUPS", "120"))
 
-# RU sites/IPs go directly. Everything unmatched is proxied because GlobalProxy=true.
 ROUTING_PROFILE = {
     "Name": "Dmitry RU Direct",
     "GlobalProxy": "true",
@@ -40,10 +66,7 @@ ROUTING_PROFILE = {
         "geosite:category-ru",
         "geosite:whitelist",
     ],
-    "DirectIp": [
-        "geoip:private",
-        "geoip:russia-inside",
-    ],
+    "DirectIp": ["geoip:private", "geoip:russia-inside"],
     "ProxySites": [
         "geosite:google-play",
         "geosite:github",
@@ -60,13 +83,21 @@ ROUTING_PROFILE = {
 }
 
 
-def fetch_json(url, timeout=30):
+def fetch_bytes(url, timeout=40):
     req = urllib.request.Request(
         url,
-        headers={"User-Agent": "happ-subscription-builder/5.0"},
+        headers={"User-Agent": "happ-subscription-builder/6.0"},
     )
     with urllib.request.urlopen(req, timeout=timeout) as response:
-        return json.load(response)
+        return response.read()
+
+
+def fetch_json(url, timeout=40):
+    return json.loads(fetch_bytes(url, timeout=timeout).decode("utf-8"))
+
+
+def fetch_text(url, timeout=40):
+    return fetch_bytes(url, timeout=timeout).decode("utf-8", errors="ignore")
 
 
 def country_flag(code):
@@ -82,10 +113,9 @@ def geo_for_ip(ip):
         if data.get("success") is False:
             raise ValueError("IP geolocation lookup failed")
         code = (data.get("country_code") or "").upper()
-        continent = (data.get("continent_code") or "").upper()
         return {
             "code": code,
-            "continent": continent,
+            "continent": (data.get("continent_code") or "").upper(),
             "country": data.get("country") or "Unknown",
             "city": data.get("city") or "",
             "flag": country_flag(code),
@@ -100,10 +130,9 @@ def geo_for_ip(ip):
         }
 
 
-def parse_vless(outbound):
+def parse_json_vless(outbound):
     if outbound.get("protocol") != "vless":
         return None
-
     vnext = (outbound.get("settings") or {}).get("vnext") or []
     if not vnext or not (vnext[0].get("users") or []):
         return None
@@ -137,11 +166,58 @@ def parse_vless(outbound):
         f"{quote(str(key))}={quote(str(value), safe='-_~.')}"
         for key, value in params
     )
+    base = f"vless://{uid}@{address}:{port}?{query}"
+    return normalize_text_vless(base)
+
+
+def normalize_text_vless(link):
+    link = link.strip()
+    if not link.lower().startswith("vless://"):
+        return None
+    link = link.split("#", 1)[0]
+    try:
+        parsed = urlsplit(link)
+        if not parsed.hostname or not parsed.port or not parsed.username:
+            return None
+        address = parsed.hostname
+        port = int(parsed.port)
+    except Exception:
+        return None
     return {
         "address": address,
-        "port": int(port),
-        "base": f"vless://{uid}@{address}:{port}?{query}",
+        "port": port,
+        "base": link,
     }
+
+
+def extract_source(source):
+    items = []
+    try:
+        if source["kind"] == "json":
+            data = fetch_json(source["url"])
+            if isinstance(data, dict):
+                data = [data]
+            for config in data:
+                for outbound in (config.get("outbounds") or []):
+                    item = parse_json_vless(outbound)
+                    if item:
+                        items.append(item)
+                        if len(items) >= MAX_PER_SOURCE:
+                            break
+                if len(items) >= MAX_PER_SOURCE:
+                    break
+        else:
+            text = fetch_text(source["url"])
+            for token in text.replace("\r", "\n").split():
+                item = normalize_text_vless(token)
+                if item:
+                    items.append(item)
+                    if len(items) >= MAX_PER_SOURCE:
+                        break
+    except Exception as exc:
+        print(f"WARN source failed: {source['name']}: {exc}")
+    print(f"Source {source['name']}: {len(items)} VLESS candidates")
+    return items
 
 
 def tcp_latency_ms(address, port):
@@ -165,42 +241,44 @@ def routing_link():
     return "happ://routing/onadd/" + base64.b64encode(raw).decode("ascii")
 
 
-def location_priority(geo):
-    # GitHub's runner can be in the US, so raw runner latency alone strongly biases
-    # North American nodes. Prefer Europe, then Asia; Happ performs the final ping
-    # and sorting from the iPhone itself.
+def subnet_key(address):
+    try:
+        ip = ipaddress.ip_address(address)
+        if isinstance(ip, ipaddress.IPv4Address):
+            return str(ipaddress.ip_network(f"{address}/24", strict=False))
+        return str(ipaddress.ip_network(f"{address}/48", strict=False))
+    except ValueError:
+        return address.lower()
+
+
+def region_penalty(geo):
+    # Small preference for Europe, but North America is deliberately kept as reserve.
     continent = geo.get("continent")
-    if continent == "EU":
-        return 0
-    if continent == "AS":
-        return 1
-    if continent in {"AF", "OC", "SA"}:
-        return 2
-    if continent == "NA":
-        return 3
-    return 2
+    return {
+        "EU": 0,
+        "AS": 80,
+        "NA": 120,
+        "AF": 160,
+        "SA": 180,
+        "OC": 200,
+    }.get(continent, 120)
 
 
 def main():
-    data = fetch_json(SOURCE_URL)
-    if isinstance(data, dict):
-        data = [data]
+    appearances = defaultdict(set)
+    by_key = {}
 
-    candidates = []
-    seen = set()
-    for config in data:
-        for outbound in (config.get("outbounds") or []):
-            item = parse_vless(outbound)
-            if not item:
-                continue
-            key = (item["address"], item["port"], item["base"])
-            if key in seen:
-                continue
-            seen.add(key)
-            candidates.append(item)
+    for source in SOURCES:
+        for item in extract_source(source):
+            key = item["base"]
+            appearances[key].add(source["name"])
+            by_key.setdefault(key, item)
 
+    candidates = list(by_key.values())
     if not candidates:
-        raise SystemExit("No VLESS links found in source JSON")
+        raise SystemExit("No VLESS candidates found from any source")
+
+    print(f"Unique candidates: {len(candidates)}")
 
     reachable = []
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
@@ -220,20 +298,59 @@ def main():
     if not reachable:
         raise SystemExit("No reachable VLESS endpoints found")
 
+    # Geolocate only the most promising endpoints to avoid unnecessary API load.
+    reachable.sort(key=lambda row: row[0])
+    pool_for_geo = reachable[:MAX_GEO_LOOKUPS]
+
     enriched = []
-    for latency, item in reachable:
+    for latency, item in pool_for_geo:
         geo = geo_for_ip(item["address"])
-        # A Russian exit node can still be subject to Russian blocking, so it should
-        # not be offered as a VPN exit for this subscription.
         if geo.get("code") == "RU":
             continue
-        enriched.append((location_priority(geo), latency, item, geo))
+        popularity = len(appearances[item["base"]])
+        # A repeated public config is more likely to be crowded. This is a heuristic,
+        # not a direct load measurement, so the penalty is intentionally moderate.
+        popularity_penalty = max(0, popularity - 1) * 90
+        score = latency + region_penalty(geo) + popularity_penalty
+        enriched.append((score, latency, popularity, item, geo))
 
     if not enriched:
         raise SystemExit("No suitable non-RU VLESS endpoints found")
 
-    enriched.sort(key=lambda row: (row[0], row[1]))
-    selected = enriched[:LIMIT]
+    enriched.sort(key=lambda row: row[0])
+
+    selected = []
+    country_counts = Counter()
+    used_subnets = set()
+
+    for row in enriched:
+        _, _, _, item, geo = row
+        code = geo.get("code") or "XX"
+        subnet = subnet_key(item["address"])
+        if country_counts[code] >= MAX_COUNTRY:
+            continue
+        if subnet in used_subnets:
+            continue
+        selected.append(row)
+        country_counts[code] += 1
+        used_subnets.add(subnet)
+        if len(selected) >= LIMIT:
+            break
+
+    # If diversity constraints leave too few nodes, relax only the country cap,
+    # while still avoiding duplicate subnets.
+    if len(selected) < LIMIT:
+        selected_bases = {row[3]["base"] for row in selected}
+        for row in enriched:
+            item = row[3]
+            subnet = subnet_key(item["address"])
+            if item["base"] in selected_bases or subnet in used_subnets:
+                continue
+            selected.append(row)
+            selected_bases.add(item["base"])
+            used_subnets.add(subnet)
+            if len(selected) >= LIMIT:
+                break
 
     lines = [
         routing_link(),
@@ -245,15 +362,15 @@ def main():
         "#profile-title: Fast VPN",
     ]
 
-    for _, latency, item, geo in selected:
+    for score, latency, popularity, item, geo in selected:
         location = geo["country"]
         if geo["city"]:
             location += f" · {geo['city']}"
         label = f"{geo['flag']} {location}"
         lines.append(f"{item['base']}#{quote(label, safe='')}")
         print(
-            f"{latency:7.1f} ms (runner)  {geo['flag']} "
-            f"{geo['country']}  {item['address']}:{item['port']}"
+            f"score={score:7.1f} runner={latency:7.1f}ms sources={popularity} "
+            f"{geo['flag']} {geo['country']} {item['address']}:{item['port']}"
         )
 
     plain = "\n".join(lines) + "\n"
@@ -265,8 +382,8 @@ def main():
         output.write(encoded + "\n")
 
     print(
-        f"Selected {len(selected)} non-RU servers from {len(candidates)} candidates; "
-        "Happ will ping and sort them on device"
+        f"Selected {len(selected)} diverse non-RU servers from {len(candidates)} unique candidates; "
+        "Happ will do final ping sorting on the iPhone"
     )
 
 
