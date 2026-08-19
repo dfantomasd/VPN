@@ -16,7 +16,7 @@ PING_ATTEMPTS = int(os.getenv("PING_ATTEMPTS", "2"))
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", "24"))
 
 # Seamless always-on profile:
-# - Russian sites/IPs and Apple/Microsoft infrastructure go DIRECT.
+# - Russian services and their CDN/API domains go DIRECT.
 # - Telegram/YouTube/GitHub and other unmatched traffic go through VPN.
 ROUTING_PROFILE = {
     "Name": "Dmitry RU Direct",
@@ -40,21 +40,66 @@ ROUTING_PROFILE = {
     "DirectSites": [
         "domain:ru",
         "domain:xn--p1ai",
+
         "domain:gosuslugi.ru",
+        "domain:gu-st.ru",
         "domain:esia.gosuslugi.ru",
         "domain:epgu.gosuslugi.ru",
         "domain:pos.gosuslugi.ru",
         "domain:nalog.ru",
+        "domain:gov.ru",
         "domain:mos.ru",
         "domain:mosreg.ru",
+
+        "domain:ozon.ru",
+        "domain:api.ozon.ru",
+        "domain:ozone.ru",
+        "domain:ozonusercontent.com",
+        "domain:ozonbank.ru",
+        "domain:ozoncard.ru",
+        "domain:ozon-credit.ru",
+        "domain:ozon-dostavka.ru",
+        "domain:ozon-tech.ru",
+        "domain:ozon.tech",
+        "domain:o3.ru",
+        "domain:o3t.ru",
+        "domain:o3team.ru",
+        "domain:o-courier.ru",
+        "domain:ocourier.ru",
+
+        "domain:wildberries.ru",
+        "domain:wb.ru",
+        "domain:wbbasket.ru",
+
         "domain:max.ru",
         "domain:vk.com",
         "domain:vk.ru",
+        "domain:userapi.com",
         "domain:mail.ru",
+
         "domain:yandex.ru",
+        "domain:yandex.net",
+        "domain:yastatic.net",
         "domain:ya.ru",
-        "domain:ozon.ru",
-        "domain:wildberries.ru",
+        "domain:kinopoisk.ru",
+
+        "domain:sberbank.ru",
+        "domain:sber.ru",
+        "domain:sbrf.ru",
+        "domain:sberpay.ru",
+        "domain:vtb.ru",
+        "domain:alfabank.ru",
+        "domain:tbank.ru",
+        "domain:t-bank.ru",
+        "domain:gazprombank.ru",
+        "domain:gpb.ru",
+        "domain:psbank.ru",
+        "domain:psb.ru",
+        "domain:rshb.ru",
+        "domain:sovcombank.ru",
+        "domain:mironline.ru",
+        "domain:nspk.ru",
+
         "geosite:private",
         "geosite:russia-inside",
         "geosite:category-ru",
@@ -82,7 +127,7 @@ ROUTING_PROFILE = {
 }
 
 def fetch_json(url, timeout=30):
-    req = urllib.request.Request(url, headers={"User-Agent": "happ-subscription-builder/8.1"})
+    req = urllib.request.Request(url, headers={"User-Agent": "happ-subscription-builder/8.2"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.load(r)
 
