@@ -3,6 +3,7 @@ import base64
 import html
 import ipaddress
 import json
+import math
 import os
 import shutil
 import socket
@@ -20,8 +21,9 @@ DEFAULT_SOURCES = [
     ("vpn-free-russia", "https://raw.githubusercontent.com/aviamastersgh/vpn-free-russia/main/verified_configs.txt"),
     ("proxy-collector", "https://raw.githubusercontent.com/Mahdi0024/ProxyCollector/master/sub/proxies.txt"),
 ]
-ROUTING_TEMPLATE_FILE = "vless_test_ru_gemini.txt"
+ROUTING_PROFILE_FILE = "routing_profile.json"
 LIMIT = int(os.getenv("VLESS_LIMIT", "20"))
+MIN_SERVERS = int(os.getenv("VLESS_MIN_SERVERS", "10"))
 PING_TIMEOUT = float(os.getenv("PING_TIMEOUT", "1.8"))
 PING_ATTEMPTS = int(os.getenv("PING_ATTEMPTS", "2"))
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", "24"))
@@ -32,6 +34,8 @@ MAX_REALITY_LATENCY_MS = float(os.getenv("MAX_REALITY_LATENCY_MS", "3500"))
 REALITY_TEST_URL = os.getenv("REALITY_TEST_URL", "https://www.gstatic.com/generate_204")
 XRAY_BIN = os.getenv("XRAY_BIN", "xray")
 CURL_BIN = os.getenv("CURL_BIN", "curl")
+MOSCOW_LATITUDE = 55.7558
+MOSCOW_LONGITUDE = 37.6173
 
 
 def configured_sources():
@@ -71,12 +75,34 @@ def fetch_json(url, timeout=30):
     return json.loads(fetch_text(url, timeout))
 
 
+def routing_profile():
+    with open(ROUTING_PROFILE_FILE, "r", encoding="utf-8") as source:
+        profile = json.load(source)
+    required = {
+        "DirectSites": {"domain:ru", "domain:xn--p1ai", "geosite:russia-inside", "geosite:category-ru"},
+        "DirectIp": {"geoip:private", "geoip:direct", "geoip:russia-inside"},
+        "ProxySites": {
+            "domain:gemini.google.com", "domain:generativelanguage.googleapis.com",
+            "domain:accounts.google.com", "domain:ai.google.dev",
+            "geosite:telegram", "geosite:youtube", "geosite:google",
+        },
+    }
+    if profile.get("Name") != "Dmitry RU Direct":
+        raise SystemExit("Routing profile must keep the stable name 'Dmitry RU Direct'")
+    if profile.get("GlobalProxy") != "true" or profile.get("DomainStrategy") != "IPIfNonMatch":
+        raise SystemExit("Routing profile must proxy unmatched traffic and resolve IP rules")
+    for field, expected in required.items():
+        if not expected.issubset(set(profile.get(field) or [])):
+            raise SystemExit(f"Routing profile is missing required {field} rules")
+    if not profile.get("ProxyIp"):
+        raise SystemExit("Routing profile must proxy Telegram IP ranges")
+    return profile
+
+
 def tested_routing_link():
-    with open(ROUTING_TEMPLATE_FILE, "r", encoding="utf-8") as source:
-        first = source.readline().strip()
-    if not first.startswith("happ://routing/onadd/"):
-        raise SystemExit("Tested routing template is missing or invalid")
-    return first
+    payload = json.dumps(routing_profile(), ensure_ascii=False, separators=(",", ":")).encode()
+    encoded = base64.urlsafe_b64encode(payload).decode().rstrip("=")
+    return "happ://routing/onadd/" + encoded
 
 
 def country_flag(code):
@@ -98,9 +124,31 @@ def geo_for_ip(ip):
             "flag": country_flag(code),
             "asn": str(connection.get("asn") or ""),
             "isp": connection.get("isp") or "",
+            "latitude": data.get("latitude"),
+            "longitude": data.get("longitude"),
         }
     except Exception:
-        return {"code": "", "country": "Unknown", "city": "", "flag": "🌐", "asn": "", "isp": ""}
+        return {
+            "code": "", "country": "Unknown", "city": "", "flag": "🌐", "asn": "", "isp": "",
+            "latitude": None, "longitude": None,
+        }
+
+
+def distance_from_moscow_km(geo):
+    try:
+        latitude, longitude = float(geo["latitude"]), float(geo["longitude"])
+    except (KeyError, TypeError, ValueError):
+        return math.inf
+    lat1, lat2 = math.radians(MOSCOW_LATITUDE), math.radians(latitude)
+    delta_lat = math.radians(latitude - MOSCOW_LATITUDE)
+    delta_lon = math.radians(longitude - MOSCOW_LONGITUDE)
+    value = math.sin(delta_lat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(delta_lon / 2) ** 2
+    return 6371.0088 * 2 * math.atan2(math.sqrt(value), math.sqrt(1 - value))
+
+
+def moscow_rank_key(row):
+    latency, item, geo = row
+    return distance_from_moscow_km(geo), latency, len(item.get("endpoint_sources") or ())
 
 
 def canonical_item(address, port, uid, params):
@@ -370,9 +418,10 @@ def select_diverse(tested, limit):
     add_pass(False)
     for latency, item, geo in tested:
         endpoint, subnet = (item["resolved_ip"], item["port"]), network_key(item["resolved_ip"])
-        if endpoint in used_endpoints or subnet in used_networks:
+        if endpoint in used_endpoints or subnet in used_networks or item["uuid"] in used_uuids:
             continue
-        selected.append((latency, item, geo)); used_endpoints.add(endpoint); used_networks.add(subnet)
+        selected.append((latency, item, geo))
+        used_endpoints.add(endpoint); used_networks.add(subnet); used_uuids.add(item["uuid"])
         if len(selected) >= limit:
             break
     return selected
@@ -415,22 +464,24 @@ def main():
         if latency > MAX_REALITY_LATENCY_MS:
             continue
         geo = geo_for_ip(item["resolved_ip"])
-        if geo.get("code") != "RU":
+        if geo.get("code") and geo["code"] != "RU" and math.isfinite(distance_from_moscow_km(geo)):
             enriched.append((latency, item, geo))
+    enriched.sort(key=moscow_rank_key)
     selected = select_diverse(enriched, LIMIT)
-    if len(selected) < LIMIT:
+    if len(selected) < MIN_SERVERS:
         raise SystemExit(
             f"Only {len(selected)} diverse endpoints passed the real proxy check; "
-            f"refusing to replace the existing {LIMIT}-node subscription"
+            f"refusing to replace the subscription below the safe minimum of {MIN_SERVERS}"
         )
-    selected.sort(key=lambda value: value[0])
+    selected.sort(key=moscow_rank_key)
 
     lines = [tested_routing_link(), "#routing-enable: 1", "#profile-update-interval: 2",
              "#subscription-auto-update-open-enable: 1", "#subscription-ping-onopen-enabled: 1",
              "#subscriptions-sort-type: ping", "#profile-title: Fast VPN"]
     for latency, item, geo in selected:
         location = geo["country"] + (f" · {geo['city']}" if geo["city"] else "")
-        label = f"{geo['flag']} {location} · {node_suffix(item)}"
+        distance = round(distance_from_moscow_km(geo))
+        label = f"{geo['flag']} {location} · {distance} km · {node_suffix(item)}"
         lines.append(f"{item['base']}#{quote(label, safe='')}")
         print(f"{latency:7.1f} ms real  {label}  {item['address']}:{item['port']}  [{','.join(sorted(item['sources']))}]")
     plain = "\n".join(lines) + "\n"
