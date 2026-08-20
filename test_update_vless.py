@@ -85,6 +85,8 @@ class ParserTests(unittest.TestCase):
         ):
             self.assertIn(rule, profile["DirectSites"])
         self.assertIn("geoip:russia-inside", profile["DirectIp"])
+        self.assertIn("geoip:ru", profile["DirectIp"])
+        self.assertIn("geoip:by", profile["DirectIp"])
         self.assertIn("geosite:telegram", profile["ProxySites"])
         self.assertIn("geosite:ru-blocked", profile["ProxySites"])
         self.assertIn("geosite:ru-geoblock", profile["ProxySites"])
@@ -112,6 +114,16 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(domains, ["api.example.com", "example.com", "xn--e1afmkfd.xn--p1ai"])
         cidrs = build_routing_data.collapse_cidrs(["192.0.2.1/32", "192.0.2.0/31", "invalid"])
         self.assertEqual(cidrs, ["192.0.2.0/31"])
+
+    def test_protected_domains_detect_proxy_conflicts(self):
+        conflicts = build_routing_data.find_domain_overlaps(
+            {"sberbank.com", "tbank.ru"},
+            {"api.sberbank.com", "tbank.ru", "unrelated.example"},
+        )
+        self.assertEqual(conflicts, [
+            ("sberbank.com", "api.sberbank.com"),
+            ("tbank.ru", "tbank.ru"),
+        ])
 
     def test_telegram_cidr_parser_rejects_noise(self):
         parsed = update_vless.parse_cidr_lines("91.108.4.0/22\ninvalid\n2001:b28:f23c::/47 # telegram\n")

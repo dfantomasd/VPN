@@ -34,7 +34,7 @@ PING_TIMEOUT = float(os.getenv("PING_TIMEOUT", "1.8"))
 PING_ATTEMPTS = int(os.getenv("PING_ATTEMPTS", "2"))
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", "24"))
 MAX_CANDIDATES_PER_SOURCE = int(os.getenv("MAX_CANDIDATES_PER_SOURCE", "300"))
-SOURCE_ROTATION_SECONDS = int(os.getenv("SOURCE_ROTATION_SECONDS", "7200"))
+SOURCE_ROTATION_SECONDS = int(os.getenv("SOURCE_ROTATION_SECONDS", "3600"))
 REALITY_TEST_WORKERS = int(os.getenv("REALITY_TEST_WORKERS", "4"))
 REALITY_TEST_LIMIT = int(os.getenv("REALITY_TEST_LIMIT", "100"))
 REALITY_TEST_TIMEOUT = float(os.getenv("REALITY_TEST_TIMEOUT", "8"))
@@ -130,7 +130,7 @@ def routing_profile():
             "geosite:category-bank-ru", "geosite:sber", "geosite:tbank-ru",
             "domain:sberbank.com", "domain:tbank-online.com", "domain:tinkoff-group.com",
         },
-        "DirectIp": {"geoip:private", "geoip:direct", "geoip:russia-inside"},
+        "DirectIp": {"geoip:private", "geoip:ru", "geoip:by", "geoip:russia-inside"},
         "ProxySites": {
             "domain:gemini.google.com", "domain:generativelanguage.googleapis.com",
             "domain:accounts.google.com", "domain:ai.google.dev",
@@ -922,7 +922,7 @@ def main():
         write_generation_status(False, len(selected), len(candidates), len(reality_ok), len(eligible), message)
         return
 
-    lines = [tested_routing_link(), "#routing-enable: 1", "#profile-update-interval: 2",
+    lines = [tested_routing_link(), "#routing-enable: 1", "#profile-update-interval: 1",
              "#subscription-auto-update-open-enable: 1", "#subscription-ping-onopen-enabled: 1",
              "#subscriptions-sort-type: ping", "#profile-title: Fast VPN"]
     for latency, item, geo in selected:

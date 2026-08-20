@@ -16,10 +16,17 @@ REFILTER_DOMAINS_URL = "https://raw.githubusercontent.com/1andrevich/Re-filter-l
 REFILTER_IPS_URL = "https://raw.githubusercontent.com/1andrevich/Re-filter-lists/main/ipsum.lst"
 COMMUNITY_DOMAINS_URL = "https://raw.githubusercontent.com/1andrevich/Re-filter-lists/main/community.lst"
 COMMUNITY_IPS_URL = "https://raw.githubusercontent.com/1andrevich/Re-filter-lists/main/community_ips.lst"
+RU_CIDRS_URL = "https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/ru.txt"
+BY_CIDRS_URL = "https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/by.txt"
 DOMAIN_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$")
 INCLUDE_RE = re.compile(r"^include:([^\s@]+)")
 MINIMUMS = {"russia-inside": 1000, "ru-blocked": 50000, "ru-geoblock": 100}
-CIDR_MINIMUMS = {"russia-inside": 500, "ru-blocked": 10000, "ru-geoblock": 5}
+CIDR_MINIMUMS = {
+    "russia-inside": 500, "ru-blocked": 10000, "ru-geoblock": 5,
+    "ru": 1000, "by": 100,
+}
+PROTECTED_CATEGORY_NAMES = ("sber", "tbank-ru")
+BROAD_DIRECT_DOMAINS = {"ru", "xn--p1ai", "su", "xn--p1acf", "moscow", "xn--80adxhks"}
 
 
 def fetch_bytes(url, timeout=180):
@@ -103,6 +110,41 @@ def copy_category(name, sources, destination, copied):
             copy_category(match.group(1), sources, destination, copied)
 
 
+def category_domains(name, sources, visited=None, include_nested=True):
+    visited = set() if visited is None else visited
+    if name in visited:
+        return set()
+    visited.add(name)
+    source = next((folder / name for folder in sources if (folder / name).is_file()), None)
+    if source is None:
+        raise RuntimeError(f"Protected GeoSite category is unavailable: {name}")
+    domains = set()
+    for raw in source.read_text(encoding="utf-8").splitlines():
+        value = raw.split("#", 1)[0].strip()
+        match = INCLUDE_RE.match(value)
+        if match and include_nested:
+            domains.update(category_domains(match.group(1), sources, visited, include_nested=True))
+        else:
+            domains.update(clean_domains([value.split(" @", 1)[0]]))
+    return domains
+
+
+def find_domain_overlaps(protected, proxied):
+    protected = set(protected)
+    proxied = set(proxied)
+
+    def ancestors(domain):
+        labels = domain.split(".")
+        return {".".join(labels[index:]) for index in range(max(1, len(labels) - 1))}
+
+    conflicts = set()
+    for domain in protected:
+        conflicts.update((domain, parent) for parent in ancestors(domain) & proxied)
+    for domain in proxied:
+        conflicts.update((parent, domain) for parent in ancestors(domain) & protected)
+    return sorted(conflicts)
+
+
 def prepare(args):
     output = Path(args.outdir)
     geosite = output / "geosite"
@@ -118,6 +160,22 @@ def prepare(args):
     geoblock_domains = clean_domains(fetch_bytes(COMMUNITY_DOMAINS_URL).decode("utf-8-sig").splitlines())
     blocked_cidrs = collapse_cidrs(fetch_bytes(REFILTER_IPS_URL).decode("utf-8-sig").splitlines())
     geoblock_cidrs = collapse_cidrs(fetch_bytes(COMMUNITY_IPS_URL).decode("utf-8-sig").splitlines())
+    ru_cidrs = collapse_cidrs(fetch_bytes(RU_CIDRS_URL).decode("utf-8-sig").splitlines())
+    by_cidrs = collapse_cidrs(fetch_bytes(BY_CIDRS_URL).decode("utf-8-sig").splitlines())
+
+    profile = json.loads(Path(args.profile).read_text(encoding="utf-8"))
+    sources = [Path(args.roscom_data), Path(args.dlc_data)]
+    protected_domains = {
+        rule.split(":", 1)[1]
+        for rule in profile.get("DirectSites", [])
+        if rule.startswith("domain:") and rule.split(":", 1)[1] not in BROAD_DIRECT_DOMAINS
+    }
+    for name in PROTECTED_CATEGORY_NAMES:
+        protected_domains.update(category_domains(name, sources, include_nested=False))
+    conflicts = find_domain_overlaps(protected_domains, blocked_domains + geoblock_domains)
+    if conflicts:
+        preview = ", ".join(f"{direct} <> {proxy}" for direct, proxy in conflicts[:10])
+        raise RuntimeError(f"Protected direct domains overlap proxy lists: {preview}")
 
     categories = {
         "russia-inside": inside_domains,
@@ -131,23 +189,25 @@ def prepare(args):
     write_lines(geoip / "russia-inside.txt", inside_cidrs)
     write_lines(geoip / "ru-blocked.txt", blocked_cidrs)
     write_lines(geoip / "ru-geoblock.txt", geoblock_cidrs)
+    write_lines(geoip / "ru.txt", ru_cidrs)
+    write_lines(geoip / "by.txt", by_cidrs)
     for name, values in {
         "russia-inside": inside_cidrs,
         "ru-blocked": blocked_cidrs,
         "ru-geoblock": geoblock_cidrs,
+        "ru": ru_cidrs,
+        "by": by_cidrs,
     }.items():
         if len(values) < CIDR_MINIMUMS[name]:
             raise RuntimeError(f"{name} unexpectedly contains only {len(values)} CIDRs")
 
-    seeds = json.loads(Path(args.profile).read_text(encoding="utf-8"))
     category_names = {
         rule.split(":", 1)[1]
         for field in ("DirectSites", "ProxySites", "BlockSites")
-        for rule in seeds.get(field, [])
+        for rule in profile.get(field, [])
         if rule.startswith("geosite:")
     }
     category_names -= categories.keys()
-    sources = [Path(args.roscom_data), Path(args.dlc_data)]
     copied = set()
     for name in sorted(category_names):
         copy_category(name, sources, geosite, copied)
@@ -161,6 +221,9 @@ def prepare(args):
         "blocked_cidrs": len(blocked_cidrs),
         "geoblock_domains": len(geoblock_domains),
         "geoblock_cidrs": len(geoblock_cidrs),
+        "protected_direct_domains": len(protected_domains),
+        "ru_cidrs": len(ru_cidrs),
+        "by_cidrs": len(by_cidrs),
         "geosite_categories": len(list(geosite.iterdir())),
     }
     (output / "metadata.json").write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
