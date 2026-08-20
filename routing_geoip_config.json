@@ -1,0 +1,12 @@
+{
+  "input": [
+    {"type": "v2rayGeoIPDat", "action": "add", "args": {"uri": "./base.dat"}},
+    {"type": "text", "action": "add", "args": {"name": "russia-inside", "uri": "./russia-inside.txt"}},
+    {"type": "text", "action": "add", "args": {"name": "ru-blocked", "uri": "./ru-blocked.txt"}},
+    {"type": "text", "action": "add", "args": {"name": "ru-geoblock", "uri": "./ru-geoblock.txt"}},
+    {"type": "private", "action": "add"}
+  ],
+  "output": [
+    {"type": "v2rayGeoIPDat", "action": "output", "args": {"outputDir": "./output", "outputName": "geoip.dat"}}
+  ]
+}

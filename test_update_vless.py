@@ -8,6 +8,7 @@ import unittest
 from unittest import mock
 
 import update_vless
+import build_routing_data
 
 
 SAMPLE = ("vless://11111111-1111-1111-1111-111111111111@203.0.113.10:443"
@@ -70,9 +71,25 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(profile["Name"], "Dmitry RU Direct")
         self.assertEqual(profile["RouteOrder"], "block-proxy-direct")
         self.assertIn("domain:ru", profile["DirectSites"])
+        self.assertIn("domain:su", profile["DirectSites"])
+        self.assertIn("domain:moscow", profile["DirectSites"])
         self.assertIn("geosite:russia-inside", profile["DirectSites"])
+        for rule in (
+            "geosite:category-bank-ru",
+            "geosite:sber",
+            "geosite:tbank-ru",
+            "domain:sberbank.com",
+            "domain:t-bank-app.ru",
+            "domain:tbank-online.com",
+            "domain:tinkoff-group.com",
+        ):
+            self.assertIn(rule, profile["DirectSites"])
         self.assertIn("geoip:russia-inside", profile["DirectIp"])
         self.assertIn("geosite:telegram", profile["ProxySites"])
+        self.assertIn("geosite:ru-blocked", profile["ProxySites"])
+        self.assertIn("geosite:ru-geoblock", profile["ProxySites"])
+        self.assertIn("geoip:ru-blocked", profile["ProxyIp"])
+        self.assertIn("geoip:ru-geoblock", profile["ProxyIp"])
         self.assertIn("149.154.160.0/20", profile["ProxyIp"])
         self.assertIn("domain:gemini.google.com", profile["ProxySites"])
         self.assertIn("domain:generativelanguage.googleapis.com", profile["ProxySites"])
@@ -83,7 +100,18 @@ class ParserTests(unittest.TestCase):
         payload = link.split("/onadd/", 1)[1]
         imported = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
         self.assertEqual(imported["Name"], "Dmitry RU Direct")
-        self.assertRegex(imported["LastUpdated"], re.compile(r"^\d{8}0000$"))
+        self.assertRegex(imported["LastUpdated"], re.compile(r"^\d{12}$"))
+        self.assertIn("geoip:ru-blocked", imported["ProxyIp"])
+        self.assertIn("149.154.160.0/20", imported["ProxyIp"])
+        self.assertTrue(imported["Geositeurl"].endswith("?v=" + imported["LastUpdated"]))
+
+    def test_routing_list_cleanup(self):
+        domains = build_routing_data.clean_domains([
+            "# ignored", "*.Example.COM", "domain:api.example.com", "https://bad.example/path", "пример.рф"
+        ])
+        self.assertEqual(domains, ["api.example.com", "example.com", "xn--e1afmkfd.xn--p1ai"])
+        cidrs = build_routing_data.collapse_cidrs(["192.0.2.1/32", "192.0.2.0/31", "invalid"])
+        self.assertEqual(cidrs, ["192.0.2.0/31"])
 
     def test_telegram_cidr_parser_rejects_noise(self):
         parsed = update_vless.parse_cidr_lines("91.108.4.0/22\ninvalid\n2001:b28:f23c::/47 # telegram\n")

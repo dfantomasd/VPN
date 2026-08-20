@@ -6,6 +6,7 @@ import ipaddress
 import json
 import math
 import os
+import re
 import shutil
 import socket
 import statistics
@@ -61,6 +62,7 @@ SERVICE_TESTS = (
 HISTORY_FILE = os.getenv("VLESS_HISTORY_FILE", "server_history.json")
 HISTORY_SAMPLES = int(os.getenv("VLESS_HISTORY_SAMPLES", "12"))
 STATUS_FILE = os.getenv("VLESS_STATUS_FILE", "generation_status.json")
+ROUTING_STATUS_FILE = os.getenv("ROUTING_STATUS_FILE", "routing_data_status.json")
 STALE_WARNING_HOURS = float(os.getenv("STALE_WARNING_HOURS", "6"))
 TELEGRAM_CIDR_URL = os.getenv(
     "TELEGRAM_CIDR_URL", "https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/telegram.txt"
@@ -121,13 +123,21 @@ def routing_profile():
     with open(ROUTING_PROFILE_FILE, "r", encoding="utf-8") as source:
         profile = json.load(source)
     required = {
-        "DirectSites": {"domain:ru", "domain:xn--p1ai", "geosite:russia-inside", "geosite:category-ru"},
+        "DirectSites": {
+            "domain:ru", "domain:xn--p1ai", "domain:su", "domain:xn--p1acf",
+            "domain:moscow", "domain:xn--80adxhks",
+            "geosite:russia-inside", "geosite:category-ru",
+            "geosite:category-bank-ru", "geosite:sber", "geosite:tbank-ru",
+            "domain:sberbank.com", "domain:tbank-online.com", "domain:tinkoff-group.com",
+        },
         "DirectIp": {"geoip:private", "geoip:direct", "geoip:russia-inside"},
         "ProxySites": {
             "domain:gemini.google.com", "domain:generativelanguage.googleapis.com",
             "domain:accounts.google.com", "domain:ai.google.dev",
             "geosite:telegram", "geosite:youtube", "geosite:google",
+            "geosite:ru-blocked", "geosite:ru-geoblock",
         },
+        "ProxyIp": {"geoip:ru-blocked", "geoip:ru-geoblock"},
     }
     if profile.get("Name") != "Dmitry RU Direct":
         raise SystemExit("Routing profile must keep the stable name 'Dmitry RU Direct'")
@@ -162,15 +172,39 @@ def current_telegram_cidrs(fallback):
         return networks
     except Exception as exc:
         print(f"Telegram CIDR refresh failed, using validated fallback: {exc}")
-        return list(fallback)
+        return parse_cidr_lines("\n".join(fallback))
+
+
+def routing_revision():
+    override = os.getenv("ROUTING_REVISION", "").strip()
+    if re.fullmatch(r"\d{12}", override):
+        return override
+    try:
+        with open(ROUTING_STATUS_FILE, encoding="utf-8") as source:
+            status = json.load(source)
+        version = str(status.get("version") or "")
+        if re.fullmatch(r"\d{12}", version):
+            return version
+    except (OSError, ValueError):
+        pass
+    return datetime.now(timezone.utc).strftime("%Y%m%d%H%M")
+
+
+def versioned_url(url, version):
+    separator = "&" if "?" in url else "?"
+    return f"{url}{separator}v={version}"
 
 
 def tested_routing_link(telegram_cidrs=None):
     profile = routing_profile()
-    profile["ProxyIp"] = list(telegram_cidrs or current_telegram_cidrs(profile["ProxyIp"]))
-    # Change once per UTC day so Happ re-imports the profile and refreshes its
-    # cached GeoSite/GeoIP files without downloading them every two hours.
-    profile["LastUpdated"] = datetime.now(timezone.utc).strftime("%Y%m%d0000")
+    static_proxy_ip = [rule for rule in profile["ProxyIp"] if rule.startswith("geoip:")]
+    fallback_cidrs = parse_cidr_lines("\n".join(profile["ProxyIp"]))
+    supplied_cidrs = parse_cidr_lines("\n".join(telegram_cidrs or []))
+    profile["ProxyIp"] = static_proxy_ip + (supplied_cidrs or current_telegram_cidrs(fallback_cidrs))
+    version = routing_revision()
+    profile["LastUpdated"] = version
+    profile["Geositeurl"] = versioned_url(profile["Geositeurl"], version)
+    profile["Geoipurl"] = versioned_url(profile["Geoipurl"], version)
     payload = json.dumps(profile, ensure_ascii=False, separators=(",", ":")).encode()
     encoded = base64.urlsafe_b64encode(payload).decode().rstrip("=")
     return "happ://routing/onadd/" + encoded
