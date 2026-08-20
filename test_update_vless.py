@@ -68,7 +68,7 @@ class ParserTests(unittest.TestCase):
 
     def test_routing_profile_covers_ru_and_telegram(self):
         profile = update_vless.routing_profile()
-        self.assertEqual(profile["Name"], "Dmitry RU Direct")
+        self.assertEqual(profile["Name"], "SIMUTIN")
         self.assertEqual(profile["RouteOrder"], "block-proxy-direct")
         self.assertIn("domain:ru", profile["DirectSites"])
         self.assertIn("domain:su", profile["DirectSites"])
@@ -101,7 +101,7 @@ class ParserTests(unittest.TestCase):
         self.assertTrue(link.startswith("happ://routing/onadd/"))
         payload = link.split("/onadd/", 1)[1]
         imported = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
-        self.assertEqual(imported["Name"], "Dmitry RU Direct")
+        self.assertEqual(imported["Name"], "SIMUTIN")
         self.assertRegex(imported["LastUpdated"], re.compile(r"^\d{12}$"))
         self.assertIn("geoip:ru-blocked", imported["ProxyIp"])
         self.assertIn("149.154.160.0/20", imported["ProxyIp"])

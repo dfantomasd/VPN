@@ -139,8 +139,8 @@ def routing_profile():
         },
         "ProxyIp": {"geoip:ru-blocked", "geoip:ru-geoblock"},
     }
-    if profile.get("Name") != "Dmitry RU Direct":
-        raise SystemExit("Routing profile must keep the stable name 'Dmitry RU Direct'")
+    if profile.get("Name") != "SIMUTIN":
+        raise SystemExit("Routing profile must keep the stable name 'SIMUTIN'")
     if profile.get("GlobalProxy") != "true" or profile.get("DomainStrategy") != "IPIfNonMatch":
         raise SystemExit("Routing profile must proxy unmatched traffic and resolve IP rules")
     for field, expected in required.items():
