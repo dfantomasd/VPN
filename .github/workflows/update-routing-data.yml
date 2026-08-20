@@ -61,9 +61,6 @@ jobs:
       - name: Build compact GeoIP
         run: |
           git clone --depth 1 https://github.com/v2fly/geoip.git "$RUNNER_TEMP/geoip-tool"
-          curl --fail --location --silent --show-error \
-            https://github.com/hydraponique/roscomvpn-geoip/releases/latest/download/geoip.dat \
-            --output "$RUNNER_TEMP/geoip-tool/base.dat"
           cp "$RUNNER_TEMP/routing-input/geoip/"*.txt "$RUNNER_TEMP/geoip-tool/"
           cp routing_geoip_config.json "$RUNNER_TEMP/geoip-tool/config-vpn.json"
           cd "$RUNNER_TEMP/geoip-tool"
@@ -95,4 +92,12 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add routing-data routing_data_status.json vless.txt vless_base64.txt
           git commit -m "Update compact routing data"
-          git push
+          for attempt in 1 2 3; do
+            if git pull --rebase origin main && git push origin main; then
+              exit 0
+            fi
+            git rebase --abort || true
+            sleep $((attempt * 2))
+          done
+          echo "Failed to publish after 3 attempts" >&2
+          exit 1

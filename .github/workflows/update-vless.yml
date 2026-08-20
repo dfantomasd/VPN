@@ -3,7 +3,7 @@ name: Update VLESS subscription
 on:
   workflow_dispatch:
   schedule:
-    - cron: "17 */2 * * *"
+    - cron: "17 * * * *"
 
 permissions:
   contents: write
@@ -68,6 +68,7 @@ jobs:
           GEO_WORKERS: "8"
           ADVANCED_TEST_WORKERS: "6"
           FINALIST_LIMIT: "30"
+          SOURCE_ROTATION_SECONDS: "3600"
         run: python3 update_vless.py
 
       - name: Publish health summary
@@ -119,5 +120,12 @@ jobs:
             exit 0
           fi
           git commit -m "Update VLESS subscription"
-          git pull --rebase origin main
-          git push origin main
+          for attempt in 1 2 3; do
+            if git pull --rebase origin main && git push origin main; then
+              exit 0
+            fi
+            git rebase --abort || true
+            sleep $((attempt * 2))
+          done
+          echo "Failed to publish after 3 attempts" >&2
+          exit 1
