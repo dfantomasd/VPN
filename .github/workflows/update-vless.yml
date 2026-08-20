@@ -11,16 +11,36 @@ permissions:
 jobs:
   update:
     runs-on: ubuntu-latest
+    env:
+      XRAY_VERSION: v26.3.27
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Validate generator
-        run: python3 -m py_compile update_vless.py
+      - name: Test generator
+        run: |
+          python3 -m py_compile update_vless.py test_update_vless.py
+          python3 -m unittest -v
+
+      - name: Install verified Xray release
+        run: |
+          archive="$RUNNER_TEMP/Xray-linux-64.zip"
+          digest="$archive.dgst"
+          release="https://github.com/XTLS/Xray-core/releases/download/$XRAY_VERSION"
+          curl --fail --location --silent --show-error "$release/Xray-linux-64.zip" --output "$archive"
+          curl --fail --location --silent --show-error "$release/Xray-linux-64.zip.dgst" --output "$digest"
+          expected="$(awk -F'= ' '/SHA2-256/ {print $2}' "$digest")"
+          echo "$expected  $archive" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/xray"
+          unzip -q "$archive" -d "$RUNNER_TEMP/xray"
+          chmod +x "$RUNNER_TEMP/xray/xray"
+          echo "XRAY_BIN=$RUNNER_TEMP/xray/xray" >> "$GITHUB_ENV"
 
       - name: Generate subscription
         env:
-          VLESS_LIMIT: "10"
+          VLESS_LIMIT: "20"
+          REALITY_TEST_LIMIT: "100"
+          REALITY_TEST_WORKERS: "4"
         run: python3 update_vless.py
 
       - name: Commit changes
