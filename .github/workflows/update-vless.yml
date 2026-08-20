@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: update-vless-main
+  cancel-in-progress: true
+
 jobs:
   update:
     runs-on: ubuntu-latest
@@ -22,7 +26,23 @@ jobs:
           python3 -m py_compile update_vless.py test_update_vless.py
           python3 -m unittest -v
 
+      - name: Restore geolocation cache
+        uses: actions/cache@v4
+        with:
+          path: .cache/geo.json
+          key: geo-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            geo-${{ runner.os }}-
+
+      - name: Cache Xray
+        id: cache-xray
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/xray
+          key: xray-${{ runner.os }}-${{ env.XRAY_VERSION }}
+
       - name: Install verified Xray release
+        if: steps.cache-xray.outputs.cache-hit != 'true'
         run: |
           archive="$RUNNER_TEMP/Xray-linux-64.zip"
           digest="$archive.dgst"
@@ -34,20 +54,26 @@ jobs:
           mkdir -p "$RUNNER_TEMP/xray"
           unzip -q "$archive" -d "$RUNNER_TEMP/xray"
           chmod +x "$RUNNER_TEMP/xray/xray"
+
+      - name: Configure Xray path
+        run: |
           echo "XRAY_BIN=$RUNNER_TEMP/xray/xray" >> "$GITHUB_ENV"
 
       - name: Generate subscription
         env:
           VLESS_LIMIT: "20"
           REALITY_TEST_LIMIT: "100"
-          REALITY_TEST_WORKERS: "4"
+          REALITY_TEST_WORKERS: "8"
+          GEO_WORKERS: "8"
+          ADVANCED_TEST_WORKERS: "6"
+          FINALIST_LIMIT: "30"
         run: python3 update_vless.py
 
       - name: Commit changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add vless.txt vless_base64.txt
+          git add vless.txt vless_base64.txt server_history.json
           if git diff --cached --quiet; then
             echo "No changes"
             exit 0
