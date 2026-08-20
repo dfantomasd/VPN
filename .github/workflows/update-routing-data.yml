@@ -1,0 +1,98 @@
+name: Update compact Happ routing data
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "37 3 * * *"
+  push:
+    branches: [main]
+    paths:
+      - "routing_profile.json"
+      - "update_vless.py"
+      - "test_update_vless.py"
+      - "build_routing_data.py"
+      - "routing_geoip_config.json"
+      - "refresh_subscription_routing.py"
+      - ".github/workflows/update-routing-data.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vpn-main-writes
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.27"
+          cache: false
+
+      - name: Test Python code
+        run: |
+          python3 -m py_compile build_routing_data.py refresh_subscription_routing.py update_vless.py
+          python3 -m unittest -v
+
+      - name: Fetch GeoSite sources
+        run: |
+          git clone --depth 1 https://github.com/v2fly/domain-list-community.git "$RUNNER_TEMP/dlc"
+          git clone --depth 1 https://github.com/hydraponique/roscomvpn-geosite.git "$RUNNER_TEMP/roscom-geosite"
+          python3 build_routing_data.py prepare \
+            --dlc-data "$RUNNER_TEMP/dlc/data" \
+            --roscom-data "$RUNNER_TEMP/roscom-geosite/data" \
+            --outdir "$RUNNER_TEMP/routing-input"
+
+      - name: Build compact GeoSite
+        run: |
+          mkdir -p "$RUNNER_TEMP/routing-built"
+          cd "$RUNNER_TEMP/dlc"
+          go run ./ \
+            --datapath="$RUNNER_TEMP/routing-input/geosite" \
+            --outputdir="$RUNNER_TEMP/routing-built" \
+            --outputname=geosite.dat
+
+      - name: Build compact GeoIP
+        run: |
+          git clone --depth 1 https://github.com/v2fly/geoip.git "$RUNNER_TEMP/geoip-tool"
+          curl --fail --location --silent --show-error \
+            https://github.com/hydraponique/roscomvpn-geoip/releases/latest/download/geoip.dat \
+            --output "$RUNNER_TEMP/geoip-tool/base.dat"
+          cp "$RUNNER_TEMP/routing-input/geoip/"*.txt "$RUNNER_TEMP/geoip-tool/"
+          cp routing_geoip_config.json "$RUNNER_TEMP/geoip-tool/config-vpn.json"
+          cd "$RUNNER_TEMP/geoip-tool"
+          go run ./ -c config-vpn.json
+          cp output/geoip.dat "$RUNNER_TEMP/routing-built/geoip.dat"
+
+      - name: Detect and finalize changes
+        id: changes
+        run: |
+          if ! python3 build_routing_data.py needs-update \
+            --built-dir "$RUNNER_TEMP/routing-built" \
+            --metadata "$RUNNER_TEMP/routing-input/metadata.json"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Routing data is unchanged"
+            exit 0
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          version="$(date -u +%Y%m%d%H%M)"
+          python3 build_routing_data.py finalize \
+            --built-dir "$RUNNER_TEMP/routing-built" \
+            --metadata "$RUNNER_TEMP/routing-input/metadata.json" \
+            --version "$version"
+          python3 refresh_subscription_routing.py
+
+      - name: Commit routing update
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add routing-data routing_data_status.json vless.txt vless_base64.txt
+          git commit -m "Update compact routing data"
+          git push

@@ -9,8 +9,8 @@ permissions:
   contents: write
 
 concurrency:
-  group: update-vless-main
-  cancel-in-progress: true
+  group: vpn-main-writes
+  cancel-in-progress: false
 
 jobs:
   update:
