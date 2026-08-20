@@ -52,14 +52,14 @@ class ParserTests(unittest.TestCase):
         self.assertLess(update_vless.distance_from_moscow_km(helsinki[2]), 1000)
         self.assertGreater(update_vless.distance_from_moscow_km(los_angeles[2]), 9000)
 
-    def test_diversity_never_reuses_uuid(self):
+    def test_diversity_reuses_uuid_only_as_fallback(self):
         def row(ip, uid, latency):
             item = update_vless.parse_vless_uri(f"vless://{uid}@{ip}:443?type=tcp&security=reality&pbk=key&sni=x")
             item["resolved_ip"] = ip
             return latency, item, {"asn": "", "code": "", "country": "", "city": "", "flag": ""}
         rows = [row("203.0.113.1", "shared", 10), row("198.51.100.1", "shared", 11), row("192.0.2.1", "unique", 12)]
         selected = update_vless.select_diverse(rows, 3)
-        self.assertEqual([item["uuid"] for _, item, _ in selected], ["shared", "unique"])
+        self.assertEqual([item["uuid"] for _, item, _ in selected], ["shared", "unique", "shared"])
 
     def test_routing_profile_covers_ru_and_telegram(self):
         profile = update_vless.routing_profile()
@@ -74,12 +74,34 @@ class ParserTests(unittest.TestCase):
         self.assertIn("domain:generativelanguage.googleapis.com", profile["ProxySites"])
         self.assertIn("domain:accounts.google.com", profile["ProxySites"])
         self.assertIn("domain:ai.google.dev", profile["ProxySites"])
-        link = update_vless.tested_routing_link()
+        link = update_vless.tested_routing_link(profile["ProxyIp"])
         self.assertTrue(link.startswith("happ://routing/onadd/"))
         payload = link.split("/onadd/", 1)[1]
         imported = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
         self.assertEqual(imported["Name"], "Dmitry RU Direct")
         self.assertRegex(imported["LastUpdated"], re.compile(r"^\d{8}0000$"))
+
+    def test_telegram_cidr_parser_rejects_noise(self):
+        parsed = update_vless.parse_cidr_lines("91.108.4.0/22\ninvalid\n2001:b28:f23c::/47 # telegram\n")
+        self.assertEqual(parsed, ["91.108.4.0/22", "2001:b28:f23c::/47"])
+
+    def test_quality_score_penalizes_shared_and_unreliable_nodes(self):
+        def item(ip, uid, sources):
+            value = update_vless.parse_vless_uri(f"vless://{uid}@{ip}:443?type=tcp&security=reality&pbk=key&sni=x")
+            value["resolved_ip"] = ip
+            value["endpoint_sources"] = set(sources)
+            return value
+        geo = {"latitude": 59.93, "longitude": 30.31}
+        stable = item("203.0.113.1", "stable", {"one"})
+        shared = item("198.51.100.1", "shared", {"one", "two", "three"})
+        history = {"servers": {
+            update_vless.history_key(stable): {"samples": [{"success": True, "latency_ms": 300, "throughput_mbps": 10}]},
+            update_vless.history_key(shared): {"samples": [{"success": False, "latency_ms": None}]},
+        }}
+        self.assertLess(
+            update_vless.quality_score((300, stable, geo), history, 10),
+            update_vless.quality_score((300, shared, geo), history, 10),
+        )
 
 
 if __name__ == "__main__":
