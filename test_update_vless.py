@@ -1,7 +1,11 @@
 import base64
 import json
+import os
 import re
+import subprocess
+import tempfile
 import unittest
+from unittest import mock
 
 import update_vless
 
@@ -102,6 +106,38 @@ class ParserTests(unittest.TestCase):
             update_vless.quality_score((300, stable, geo), history, 10),
             update_vless.quality_score((300, shared, geo), history, 10),
         )
+
+    def test_source_sample_rotates_across_the_whole_feed(self):
+        items = [{"base": f"node-{index}"} for index in range(20)]
+        first = update_vless.rotating_source_sample("feed", items, 5, bucket=1)
+        second = update_vless.rotating_source_sample("feed", items, 5, bucket=2)
+        self.assertEqual(len(first), 5)
+        self.assertEqual(len({item["base"] for item in first}), 5)
+        self.assertNotEqual([item["base"] for item in first], [item["base"] for item in second])
+        self.assertGreater(len({item["base"] for item in first + second}), 5)
+
+    @mock.patch("update_vless.subprocess.run")
+    def test_service_checks_distinguish_reachable_from_success(self, run):
+        run.return_value = subprocess.CompletedProcess([], 0, stdout="404", stderr="")
+        self.assertTrue(update_vless.http_service_check(1080, "https://api.telegram.org", False))
+        self.assertFalse(update_vless.http_service_check(1080, "https://gemini.google.com", True))
+        run.return_value = subprocess.CompletedProcess([], 0, stdout="200", stderr="")
+        self.assertTrue(update_vless.http_service_check(1080, "https://gemini.google.com", True))
+
+    def test_generation_status_preserves_last_success_when_degraded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "status.json")
+            with mock.patch.object(update_vless, "STATUS_FILE", path):
+                update_vless.write_generation_status(True, 20, 500, 30, 20)
+                with open(path, encoding="utf-8") as source:
+                    healthy = json.load(source)
+                with mock.patch("builtins.print"):
+                    update_vless.write_generation_status(False, 4, 100, 7, 4, "too few")
+                with open(path, encoding="utf-8") as source:
+                    degraded = json.load(source)
+            self.assertEqual(degraded["status"], "degraded")
+            self.assertEqual(degraded["last_success_at"], healthy["last_success_at"])
+            self.assertEqual(degraded["selected_count"], 4)
 
 
 if __name__ == "__main__":

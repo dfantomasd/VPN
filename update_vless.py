@@ -33,6 +33,7 @@ PING_TIMEOUT = float(os.getenv("PING_TIMEOUT", "1.8"))
 PING_ATTEMPTS = int(os.getenv("PING_ATTEMPTS", "2"))
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", "24"))
 MAX_CANDIDATES_PER_SOURCE = int(os.getenv("MAX_CANDIDATES_PER_SOURCE", "300"))
+SOURCE_ROTATION_SECONDS = int(os.getenv("SOURCE_ROTATION_SECONDS", "7200"))
 REALITY_TEST_WORKERS = int(os.getenv("REALITY_TEST_WORKERS", "4"))
 REALITY_TEST_LIMIT = int(os.getenv("REALITY_TEST_LIMIT", "100"))
 REALITY_TEST_TIMEOUT = float(os.getenv("REALITY_TEST_TIMEOUT", "8"))
@@ -52,8 +53,15 @@ THROUGHPUT_TEST_URL = os.getenv(
 THROUGHPUT_TEST_TIMEOUT = float(os.getenv("THROUGHPUT_TEST_TIMEOUT", "10"))
 MIN_THROUGHPUT_MBPS = float(os.getenv("MIN_THROUGHPUT_MBPS", "0.5"))
 UDP_TEST_TIMEOUT = float(os.getenv("UDP_TEST_TIMEOUT", "4"))
+SERVICE_TEST_TIMEOUT = float(os.getenv("SERVICE_TEST_TIMEOUT", "7"))
+SERVICE_TESTS = (
+    ("telegram", os.getenv("TELEGRAM_TEST_URL", "https://api.telegram.org/botINVALID/getMe"), False),
+    ("gemini", os.getenv("GEMINI_TEST_URL", "https://gemini.google.com/"), True),
+)
 HISTORY_FILE = os.getenv("VLESS_HISTORY_FILE", "server_history.json")
 HISTORY_SAMPLES = int(os.getenv("VLESS_HISTORY_SAMPLES", "12"))
+STATUS_FILE = os.getenv("VLESS_STATUS_FILE", "generation_status.json")
+STALE_WARNING_HOURS = float(os.getenv("STALE_WARNING_HOURS", "6"))
 TELEGRAM_CIDR_URL = os.getenv(
     "TELEGRAM_CIDR_URL", "https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/telegram.txt"
 )
@@ -439,6 +447,19 @@ def parse_source(text):
     return items
 
 
+def rotating_source_sample(name, items, limit, bucket=None):
+    unique = list(dict.fromkeys(item["base"] for item in items))
+    by_base = {item["base"]: item for item in items}
+    if len(unique) <= limit:
+        return [by_base[base] for base in unique]
+    bucket = int(time.time() // SOURCE_ROTATION_SECONDS) if bucket is None else int(bucket)
+    seed = int(hashlib.sha256(f"{name}:{bucket}".encode()).hexdigest()[:12], 16)
+    offset = seed % len(unique)
+    rotated = unique[offset:] + unique[:offset]
+    indexes = [index * len(rotated) // limit for index in range(limit)]
+    return [by_base[rotated[index]] for index in indexes]
+
+
 def collect_candidates(sources):
     merged, failures = {}, []
     with ThreadPoolExecutor(max_workers=min(len(sources), 6)) as pool:
@@ -449,17 +470,17 @@ def collect_candidates(sources):
                 items = parse_source(future.result())
                 if not items:
                     raise ValueError("no supported VLESS Reality TCP nodes")
+                sampled = rotating_source_sample(name, items, MAX_CANDIDATES_PER_SOURCE)
                 source_keys = set()
-                for item in items:
-                    if item["base"] in source_keys:
-                        continue
-                    if len(source_keys) >= MAX_CANDIDATES_PER_SOURCE:
-                        break
+                for item in sampled:
                     source_keys.add(item["base"])
                     if item["base"] not in merged:
                         merged[item["base"]] = item
                     merged[item["base"]]["sources"].add(name)
-                print(f"source {name}: {len(source_keys)} unique supported candidates")
+                print(
+                    f"source {name}: sampled {len(source_keys)} of "
+                    f"{len(set(item['base'] for item in items))} unique supported candidates"
+                )
             except Exception as exc:
                 failures.append(f"{name}: {exc}")
                 print(f"source {name}: FAILED: {exc}")
@@ -612,6 +633,21 @@ def socks5_udp_dns_check(port, timeout=UDP_TEST_TIMEOUT):
     return len(dns) >= 12 and dns[:2] == transaction_id and bool(dns[2] & 0x80)
 
 
+def http_service_check(port, url, require_success, timeout=SERVICE_TEST_TIMEOUT):
+    try:
+        result = subprocess.run([
+            CURL_BIN, "--silent", "--show-error", "--location", "--max-redirs", "3",
+            "--output", os.devnull, "--write-out", "%{http_code}", "--max-time", str(timeout),
+            "--proxy", f"socks5h://127.0.0.1:{port}", url,
+        ], capture_output=True, text=True, timeout=timeout + 2, check=False)
+        status = int(result.stdout.strip()) if result.returncode == 0 else 0
+        if require_success:
+            return 200 <= status < 400
+        return 200 <= status < 500 and status != 451
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return False
+
+
 def advanced_probe(item):
     port = free_local_port()
     config = {
@@ -635,13 +671,23 @@ def advanced_probe(item):
             ], capture_output=True, text=True, timeout=THROUGHPUT_TEST_TIMEOUT + 2, check=False)
             size, speed = (float(value) for value in result.stdout.strip().split()) if result.returncode == 0 else (0.0, 0.0)
             throughput = speed * 8 / 1_000_000 if size >= THROUGHPUT_BYTES * 0.8 else 0.0
-            try:
-                udp_ok = socks5_udp_dns_check(port)
-            except OSError:
-                udp_ok = False
-            return {"throughput_mbps": throughput, "udp": udp_ok}
+            with ThreadPoolExecutor(max_workers=len(SERVICE_TESTS) + 1) as checks:
+                service_futures = {
+                    name: checks.submit(http_service_check, port, url, require_success)
+                    for name, url, require_success in SERVICE_TESTS
+                }
+                udp_future = checks.submit(socks5_udp_dns_check, port)
+                services = {name: future.result() for name, future in service_futures.items()}
+                try:
+                    udp_ok = udp_future.result()
+                except OSError:
+                    udp_ok = False
+            return {"throughput_mbps": throughput, "udp": udp_ok, "services": services}
         except (OSError, ValueError, subprocess.TimeoutExpired):
-            return {"throughput_mbps": 0.0, "udp": False}
+            return {
+                "throughput_mbps": 0.0, "udp": False,
+                "services": {name: False for name, _, _ in SERVICE_TESTS},
+            }
         finally:
             process.terminate()
             try:
@@ -716,6 +762,35 @@ def take_unique(rows, limit):
     return selected
 
 
+def write_generation_status(success, selected_count, candidates, reality_ok, eligible, message=""):
+    now = datetime.now(timezone.utc)
+    previous = load_json_file(STATUS_FILE, {})
+    last_success = now.isoformat() if success else previous.get("last_success_at")
+    stale_hours = None
+    if last_success:
+        try:
+            stale_hours = max(0.0, (now - datetime.fromisoformat(last_success)).total_seconds() / 3600)
+        except ValueError:
+            stale_hours = None
+    status = {
+        "version": 1,
+        "status": "healthy" if success else "degraded",
+        "last_attempt_at": now.isoformat(),
+        "last_success_at": last_success,
+        "stale_hours": round(stale_hours, 2) if stale_hours is not None else None,
+        "selected_count": selected_count,
+        "candidate_count": candidates,
+        "reality_passed_count": reality_ok,
+        "quality_passed_count": eligible,
+        "minimum_required": MIN_SERVERS,
+        "message": message,
+    }
+    save_json_file(STATUS_FILE, status)
+    if not success or (stale_hours is not None and stale_hours >= STALE_WARNING_HOURS):
+        warning = message or f"Subscription has not refreshed for {stale_hours:.1f} hours"
+        print(f"::warning title=VPN subscription is stale::{warning}")
+
+
 def main():
     if not shutil.which(XRAY_BIN):
         raise SystemExit(f"Xray binary not found: {XRAY_BIN}")
@@ -783,7 +858,10 @@ def main():
             try:
                 result = future.result()
             except Exception:
-                result = {"throughput_mbps": 0.0, "udp": False}
+                result = {
+                    "throughput_mbps": 0.0, "udp": False,
+                    "services": {name: False for name, _, _ in SERVICE_TESTS},
+                }
             key = history_key(row[1])
             advanced[key] = result
             current_results[key].update(result)
@@ -792,15 +870,22 @@ def main():
     eligible = []
     for row in finalists:
         result = advanced.get(history_key(row[1])) or {}
-        if result.get("udp") and float(result.get("throughput_mbps") or 0) >= MIN_THROUGHPUT_MBPS:
+        services = result.get("services") or {}
+        if (
+            result.get("udp")
+            and all(services.get(name) for name, _, _ in SERVICE_TESTS)
+            and float(result.get("throughput_mbps") or 0) >= MIN_THROUGHPUT_MBPS
+        ):
             eligible.append(row)
     eligible.sort(key=lambda row: quality_score(row, history, advanced[history_key(row[1])]["throughput_mbps"]))
     selected = eligible[:LIMIT]
     if len(selected) < MIN_SERVERS:
-        print(
+        message = (
             f"Only {len(selected)} diverse endpoints passed latency, throughput and UDP checks; "
             f"keeping the current subscription below the safe minimum of {MIN_SERVERS}"
         )
+        print(message)
+        write_generation_status(False, len(selected), len(candidates), len(reality_ok), len(eligible), message)
         return
 
     lines = [tested_routing_link(), "#routing-enable: 1", "#profile-update-interval: 2",
@@ -812,15 +897,20 @@ def main():
         label = f"{geo['flag']} {location} · {distance} km · {node_suffix(item)}"
         lines.append(f"{item['base']}#{quote(label, safe='')}")
         speed = advanced[history_key(item)]["throughput_mbps"]
-        print(f"{latency:7.1f} ms  {speed:6.2f} Mbps  UDP ok  {label}  [{','.join(sorted(item['sources']))}]")
+        services = "+".join(name for name, ok in advanced[history_key(item)]["services"].items() if ok)
+        print(
+            f"{latency:7.1f} ms  {speed:6.2f} Mbps  UDP ok  {services} ok  "
+            f"{label}  [{','.join(sorted(item['sources']))}]"
+        )
     plain = "\n".join(lines) + "\n"
     with open("vless.txt", "w", encoding="utf-8") as output:
         output.write(plain)
     with open("vless_base64.txt", "w", encoding="utf-8") as output:
         output.write(base64.b64encode(plain.encode()).decode() + "\n")
+    write_generation_status(True, len(selected), len(candidates), len(reality_ok), len(eligible))
     print(
         f"Selected {len(selected)} diverse Reality servers from {len(candidates)} candidates; "
-        f"{len(reality_ok)} passed latency and {len(eligible)} passed throughput+UDP"
+        f"{len(reality_ok)} passed latency and {len(eligible)} passed all quality checks"
     )
 
 
