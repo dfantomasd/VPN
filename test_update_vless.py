@@ -1,5 +1,6 @@
 import base64
 import json
+import re
 import unittest
 
 import update_vless
@@ -73,7 +74,12 @@ class ParserTests(unittest.TestCase):
         self.assertIn("domain:generativelanguage.googleapis.com", profile["ProxySites"])
         self.assertIn("domain:accounts.google.com", profile["ProxySites"])
         self.assertIn("domain:ai.google.dev", profile["ProxySites"])
-        self.assertTrue(update_vless.tested_routing_link().startswith("happ://routing/onadd/"))
+        link = update_vless.tested_routing_link()
+        self.assertTrue(link.startswith("happ://routing/onadd/"))
+        payload = link.split("/onadd/", 1)[1]
+        imported = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+        self.assertEqual(imported["Name"], "Dmitry RU Direct")
+        self.assertRegex(imported["LastUpdated"], re.compile(r"^\d{8}0000$"))
 
 
 if __name__ == "__main__":

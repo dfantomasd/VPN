@@ -13,6 +13,7 @@ import tempfile
 import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 from urllib.parse import parse_qsl, quote, unquote, urlsplit
 
 
@@ -100,7 +101,11 @@ def routing_profile():
 
 
 def tested_routing_link():
-    payload = json.dumps(routing_profile(), ensure_ascii=False, separators=(",", ":")).encode()
+    profile = routing_profile()
+    # Change once per UTC day so Happ re-imports the profile and refreshes its
+    # cached GeoSite/GeoIP files without downloading them every two hours.
+    profile["LastUpdated"] = datetime.now(timezone.utc).strftime("%Y%m%d0000")
+    payload = json.dumps(profile, ensure_ascii=False, separators=(",", ":")).encode()
     encoded = base64.urlsafe_b64encode(payload).decode().rstrip("=")
     return "happ://routing/onadd/" + encoded
 
