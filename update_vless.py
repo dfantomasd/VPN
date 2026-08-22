@@ -162,6 +162,8 @@ def routing_profile():
         "DirectSites": {
             "domain:ru", "domain:xn--p1ai", "domain:su", "domain:xn--p1acf",
             "domain:moscow", "domain:xn--80adxhks",
+            "domain:raw.githubusercontent.com", "domain:githubusercontent.com",
+            "domain:cdn.jsdelivr.net", "domain:jsdelivr.net",
             "geosite:russia-inside", "geosite:category-ru",
             "geosite:category-bank-ru", "geosite:sber", "geosite:tbank-ru",
             "domain:sberbank.com", "domain:tbank-online.com", "domain:tinkoff-group.com",
@@ -234,7 +236,8 @@ def tested_routing_link(telegram_cidrs=None):
     # line on every subscription refresh; changing a live CIDR feed here used
     # to cause needless in-place routing updates on iOS.
     profile["ProxyIp"] = static_proxy_ip + (supplied_cidrs or fallback_cidrs)
-    version = routing_revision()
+    revisions = [routing_revision(), str(profile.get("LastUpdated") or "")]
+    version = str(max(int(value) for value in revisions if re.fullmatch(r"\d{9,11}", value)))
     profile["LastUpdated"] = version
     profile["Geositeurl"] = versioned_url(profile["Geositeurl"], version)
     profile["Geoipurl"] = versioned_url(profile["Geoipurl"], version)
