@@ -19,6 +19,12 @@ SAMPLE = ("vless://11111111-1111-1111-1111-111111111111@203.0.113.10:443"
 
 
 class ParserTests(unittest.TestCase):
+    def test_published_subscription_enables_device_health_sorting(self):
+        with open("vless.txt", encoding="utf-8") as source:
+            payload = source.read()
+        self.assertIn("#subscription-ping-onopen-enabled: 1", payload)
+        self.assertIn("#subscriptions-sort-type: ping", payload)
+
     def test_plain_vless(self):
         items = update_vless.parse_source("# comment\n" + SAMPLE + "\n")
         self.assertEqual(len(items), 1)
@@ -190,6 +196,18 @@ class ParserTests(unittest.TestCase):
         }
         history = {"servers": {update_vless.history_key(item): {"samples": [strict, strict]}}}
         self.assertEqual(update_vless.strict_pass_count(item, history), 2)
+
+    def test_fresh_strict_pass_is_currently_eligible_before_stable(self):
+        item = update_vless.parse_vless_uri(SAMPLE)
+        item["resolved_ip"] = "203.0.113.10"
+        current = {
+            "success": True, "quality_ok": True, "telegram_dc": True,
+            "udp": True, "throughput_mbps": 8,
+            "services": {"telegram": True, "gemini": True},
+        }
+        history = {"servers": {update_vless.history_key(item): {"samples": [current]}}}
+        self.assertEqual(update_vless.strict_pass_count(item, history), 1)
+        self.assertLess(update_vless.strict_pass_count(item, history), update_vless.STABILITY_MIN_STRICT_PASSES)
 
     def test_russian_probe_cache_is_shared_by_endpoint(self):
         first = update_vless.parse_vless_uri(SAMPLE)
