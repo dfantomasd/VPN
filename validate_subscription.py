@@ -57,9 +57,11 @@ def validate_files(plain_path, base64_path, minimum):
         raise ValueError(f"subscription contains only {len(nodes)} valid nodes; minimum is {minimum}")
     for line in node_lines:
         params = dict(update_vless.parse_qsl(update_vless.urlsplit(line).query, keep_blank_values=True))
-        for field in ("fp", "sni", "pbk"):
+        for field in ("fp", "sni"):
             if not params.get(field):
                 raise ValueError(f"published VLESS URI is missing {field}")
+        if params.get("security") == "reality" and not params.get("pbk"):
+            raise ValueError("published VLESS Reality URI is missing pbk")
     if profile.get("GlobalProxy") != "false":
         raise ValueError("SIMUTIN must send unmatched traffic directly")
     if profile.get("RouteOrder") != "block-direct-proxy":
@@ -73,8 +75,8 @@ def validate_files(plain_path, base64_path, minimum):
     return profile, nodes
 
 
-def validate_with_xray(profile, first_node, xray_bin, asset_dir):
-    proxy = update_vless.xray_outbound(first_node)
+def validate_with_xray(profile, node, xray_bin, asset_dir):
+    proxy = update_vless.xray_outbound(node)
     direct = {"protocol": "freedom", "tag": "direct"}
     block = {"protocol": "blackhole", "tag": "block"}
     outbounds = [direct, proxy, block] if str(profile.get("GlobalProxy")).lower() == "false" else [proxy, direct, block]
@@ -112,7 +114,8 @@ def main():
     parser.add_argument("--asset-dir", default="routing-data")
     args = parser.parse_args()
     profile, nodes = validate_files(args.plain, args.base64, args.minimum)
-    validate_with_xray(profile, nodes[0], args.xray, args.asset_dir)
+    for node in nodes:
+        validate_with_xray(profile, node, args.xray, args.asset_dir)
     print(f"Subscription OK: {len(nodes)} nodes, routing {profile['Name']}, revision {profile['LastUpdated']}")
 
 
