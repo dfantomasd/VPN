@@ -92,7 +92,7 @@ jobs:
         if: steps.freshness.outputs.run == 'true'
         id: generate
         env:
-          VLESS_LIMIT: "20"
+          VLESS_LIMIT: "30"
           VLESS_MIN_SERVERS: "3"
           STABILITY_MIN_STRICT_PASSES: "2"
           RU_PROBE_ASNS: "8359,12389"

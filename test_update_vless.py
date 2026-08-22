@@ -16,6 +16,12 @@ import validate_subscription
 SAMPLE = ("vless://11111111-1111-1111-1111-111111111111@203.0.113.10:443"
           "?type=tcp&security=reality&encryption=none&flow=xtls-rprx-vision"
           "&sni=example.com&fp=chrome&pbk=public-key&sid=abcd#Example")
+WS_TLS = ("vless://22222222-2222-2222-2222-222222222222@cdn.example.com:443"
+          "?type=ws&security=tls&encryption=none&sni=origin.example.com&fp=firefox"
+          "&host=origin.example.com&path=%2Fmobile#WS")
+XHTTP_REALITY = ("vless://33333333-3333-3333-3333-333333333333@edge.example.com:443"
+                 "?type=xhttp&security=reality&encryption=none&sni=cover.example.com"
+                 "&fp=chrome&pbk=public-key&sid=abcd&path=%2Fx&mode=auto#XHTTP")
 
 
 class ParserTests(unittest.TestCase):
@@ -24,6 +30,13 @@ class ParserTests(unittest.TestCase):
             payload = source.read()
         self.assertIn("#subscription-ping-onopen-enabled: 1", payload)
         self.assertIn("#subscriptions-sort-type: ping", payload)
+
+    def test_published_subscription_uses_real_proxy_ping_and_tls_fragmentation(self):
+        with open("vless.txt", encoding="utf-8") as source:
+            payload = source.read()
+        self.assertIn("#ping-type: proxy", payload)
+        self.assertIn("#proxy-ping-timeout: 12", payload)
+        self.assertIn("#fragmentation-packets: tlshello", payload)
 
     def test_plain_vless(self):
         items = update_vless.parse_source("# comment\n" + SAMPLE + "\n")
@@ -38,6 +51,28 @@ class ParserTests(unittest.TestCase):
     def test_rejects_non_reality_and_unsupported_transport(self):
         self.assertIsNone(update_vless.parse_vless_uri("vless://id@203.0.113.1:443?type=tcp&security=tls&pbk=x"))
         self.assertIsNone(update_vless.parse_vless_uri("vless://id@203.0.113.1:443?type=ws&security=reality&pbk=x"))
+
+    def test_accepts_ws_tls_and_builds_xray_settings(self):
+        item = update_vless.parse_vless_uri(WS_TLS)
+        self.assertIsNotNone(item)
+        item["resolved_ip"] = "203.0.113.50"
+        outbound = update_vless.xray_outbound(item)
+        self.assertEqual(outbound["settings"]["vnext"][0]["address"], "cdn.example.com")
+        self.assertEqual(outbound["streamSettings"]["network"], "ws")
+        self.assertEqual(outbound["streamSettings"]["wsSettings"]["path"], "/mobile")
+        self.assertFalse(outbound["streamSettings"]["tlsSettings"]["allowInsecure"])
+
+    def test_accepts_xhttp_reality_and_builds_xray_settings(self):
+        item = update_vless.parse_vless_uri(XHTTP_REALITY)
+        self.assertIsNotNone(item)
+        item["resolved_ip"] = "203.0.113.60"
+        outbound = update_vless.xray_outbound(item)
+        self.assertEqual(outbound["settings"]["vnext"][0]["address"], "edge.example.com")
+        self.assertEqual(outbound["streamSettings"]["network"], "xhttp")
+        self.assertEqual(outbound["streamSettings"]["xhttpSettings"]["mode"], "auto")
+
+    def test_rejects_insecure_tls_nodes(self):
+        self.assertIsNone(update_vless.parse_vless_uri(WS_TLS.replace("&path=", "&allowInsecure=1&path=")))
 
     def test_json_outbound(self):
         config = {"outbounds": [{"protocol": "vless", "settings": {"vnext": [{"address": "203.0.113.20", "port": 443, "users": [{"id": "22222222-2222-2222-2222-222222222222", "encryption": "none", "flow": "xtls-rprx-vision"}]}]}, "streamSettings": {"network": "tcp", "security": "reality", "realitySettings": {"serverName": "example.com", "fingerprint": "firefox", "publicKey": "key", "shortId": "1234"}}}]}
@@ -83,6 +118,34 @@ class ParserTests(unittest.TestCase):
         rendered = update_vless.rendered_vless_uri(item)
         self.assertIn("@203.0.113.20:443?", rendered)
         self.assertIn("sni=example.com", rendered)
+
+    def test_rendered_cdn_uri_preserves_hostname(self):
+        item = update_vless.parse_vless_uri(WS_TLS)
+        item["resolved_ip"] = "203.0.113.20"
+        rendered = update_vless.rendered_vless_uri(item)
+        self.assertIn("@cdn.example.com:443?", rendered)
+        self.assertNotIn("@203.0.113.20:443?", rendered)
+
+    def test_publish_mix_prioritizes_mobile_transports(self):
+        def row(uri, latency):
+            item = update_vless.parse_vless_uri(uri)
+            item["resolved_ip"] = "203.0.113.10"
+            return latency, item, {}
+        raw = [row(SAMPLE.replace("11111111", f"1111111{i}"), i) for i in range(4)]
+        mobile = [row(WS_TLS.replace("22222222", f"2222222{i}"), i + 10) for i in range(3)]
+        selected = update_vless.select_publish_mix(raw + mobile, 5)
+        self.assertTrue(all(update_vless.mobile_transport(value[1]) for value in selected[:3]))
+        self.assertEqual(len(selected), 5)
+
+    def test_probe_pool_reserves_capacity_for_mobile_transports(self):
+        def row(uri, latency, suffix):
+            item = update_vless.parse_vless_uri(uri.replace("11111111", f"111111{suffix}1").replace("22222222", f"222222{suffix}2"))
+            item["resolved_ip"] = f"203.0.113.{suffix}"
+            return latency, item, {"latitude": 55.7, "longitude": 37.6}
+        raw = [row(SAMPLE, index, index + 1) for index in range(8)]
+        mobile = [row(WS_TLS, index + 20, index + 20) for index in range(4)]
+        pool = update_vless.mixed_test_pool(raw + mobile, 6)
+        self.assertGreaterEqual(sum(update_vless.mobile_transport(value[1]) for value in pool), 3)
 
     def test_published_uri_contains_the_fingerprint_used_by_xray(self):
         item = update_vless.parse_vless_uri(SAMPLE.replace("&fp=chrome", ""))

@@ -22,13 +22,17 @@ from urllib.parse import parse_qsl, quote, unquote, urlsplit
 
 DEFAULT_SOURCES = [
     ("connliberty", "https://connliberty.com/connection/subs/d950be8a-ab95-4618-bf67-21b76c969342?r=1"),
+    # Hourly snapshot of the same Connliberty catalog.  It is a fallback for
+    # source outages and, unlike the old implementation, is not trusted
+    # blindly: every extracted outbound still goes through our probes.
+    ("kenkaral-fallback", "https://raw.githubusercontent.com/kenkaral45/happ-subscription/main/whitelist_configs_combined.json"),
     ("vpn-free-russia", "https://raw.githubusercontent.com/aviamastersgh/vpn-free-russia/main/verified_configs.txt"),
     ("proxy-collector", "https://raw.githubusercontent.com/Mahdi0024/ProxyCollector/master/sub/proxies.txt"),
     ("barry-far", "https://raw.githubusercontent.com/barry-far/V2ray-Config/main/Splitted-By-Protocol/vless.txt"),
     ("radikal", "https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/protocols/vless.txt"),
 ]
 ROUTING_PROFILE_FILE = "routing_profile.json"
-LIMIT = int(os.getenv("VLESS_LIMIT", "20"))
+LIMIT = int(os.getenv("VLESS_LIMIT", "30"))
 MIN_SERVERS = int(os.getenv("VLESS_MIN_SERVERS", "3"))
 PING_TIMEOUT = float(os.getenv("PING_TIMEOUT", "1.8"))
 PING_ATTEMPTS = int(os.getenv("PING_ATTEMPTS", "2"))
@@ -328,7 +332,10 @@ def geolocate_ips(ips):
 
 
 def history_key(item):
-    identity = f"{item.get('resolved_ip') or item['address']}:{item['port']}|{item['uuid']}"
+    # Credentials can be reused on the same endpoint for several transports.
+    # Treat those as distinct nodes: a working WS/XHTTP route must not inherit
+    # the failure history of a DPI-blocked RAW/Reality route.
+    identity = item.get("base") or f"{item['address']}:{item['port']}|{item['uuid']}"
     return hashlib.sha256(identity.encode()).hexdigest()[:24]
 
 
@@ -479,6 +486,11 @@ def moscow_rank_key(row):
     return distance_from_moscow_km(geo), latency, len(item.get("endpoint_sources") or ())
 
 
+def mobile_transport(item):
+    """HTTP-shaped transports survive mobile DPI more often than bare TCP."""
+    return item.get("network") not in {"tcp", "raw"}
+
+
 def quality_score(row, history, throughput_mbps=None):
     latency, item, geo = row
     stats = history_stats(item, history)
@@ -499,15 +511,33 @@ def canonical_item(address, port, uid, params):
     if not address or not port or not uid:
         return None
     network = (params.get("type") or params.get("network") or "tcp").lower()
-    if params.get("security") != "reality" or not params.get("pbk") or not params.get("sni"):
+    security = (params.get("security") or "").lower()
+    if network == "raw":
+        uri_network = "raw"
+    elif network == "tcp":
+        uri_network = "tcp"
+    else:
+        uri_network = network
+    supported = {
+        "reality": {"tcp", "raw", "xhttp", "grpc"},
+        "tls": {"tcp", "raw", "ws", "xhttp", "grpc", "httpupgrade"},
+    }
+    if security not in supported or network not in supported[security]:
         return None
-    if network not in {"tcp", "raw"}:
+    if not params.get("sni"):
+        return None
+    if security == "reality" and not params.get("pbk"):
+        return None
+    if security == "tls" and str(params.get("allowInsecure") or "0").lower() in {"1", "true", "yes"}:
         return None
     normalized = {
-        "encryption": params.get("encryption") or "none", "type": network,
-        "security": "reality", "fp": params.get("fp") or "chrome",
+        "encryption": params.get("encryption") or "none", "type": uri_network,
+        "security": security, "fp": params.get("fp") or "chrome",
     }
-    for key in ("flow", "sni", "pbk", "sid", "spx"):
+    for key in (
+        "flow", "sni", "pbk", "sid", "spx", "path", "host", "mode",
+        "serviceName", "authority", "alpn", "headerType", "extra",
+    ):
         value = params.get(key)
         if value not in (None, ""):
             normalized[key] = str(value)
@@ -517,9 +547,14 @@ def canonical_item(address, port, uid, params):
     return {
         "address": address, "port": int(port), "uuid": str(uid), "network": network,
         "encryption": normalized["encryption"], "flow": normalized.get("flow", ""),
+        "security": security,
         "sni": normalized.get("sni", ""), "fingerprint": normalized.get("fp", "chrome"),
-        "public_key": normalized["pbk"], "short_id": normalized.get("sid", ""),
-        "spider_x": normalized.get("spx", ""), "base": base, "sources": set(),
+        "public_key": normalized.get("pbk", ""), "short_id": normalized.get("sid", ""),
+        "spider_x": normalized.get("spx", ""), "path": normalized.get("path", "/"),
+        "host": normalized.get("host", ""), "mode": normalized.get("mode", "auto"),
+        "service_name": normalized.get("serviceName", ""),
+        "authority": normalized.get("authority", ""), "alpn": normalized.get("alpn", ""),
+        "extra": normalized.get("extra", ""), "base": base, "sources": set(),
     }
 
 
@@ -542,15 +577,26 @@ def parse_vless_outbound(outbound):
         return None
     server, user = vnext[0], vnext[0]["users"][0]
     stream = outbound.get("streamSettings") or {}
+    security = stream.get("security") or ""
     reality = stream.get("realitySettings") or {}
+    tls = stream.get("tlsSettings") or {}
+    ws = stream.get("wsSettings") or {}
+    grpc = stream.get("grpcSettings") or {}
+    xhttp = stream.get("xhttpSettings") or {}
     address, port, uid = server.get("address"), server.get("port"), user.get("id")
     if not all((address, port, uid)):
         return None
     return canonical_item(address, port, uid, {
         "encryption": user.get("encryption") or "none", "type": stream.get("network") or "tcp",
-        "security": stream.get("security"), "flow": user.get("flow"),
-        "sni": reality.get("serverName"), "fp": reality.get("fingerprint"),
+        "security": security, "flow": user.get("flow"),
+        "sni": (reality if security == "reality" else tls).get("serverName"),
+        "fp": (reality if security == "reality" else tls).get("fingerprint"),
         "pbk": reality.get("publicKey"), "sid": reality.get("shortId"), "spx": reality.get("spiderX"),
+        "path": (xhttp or ws).get("path"),
+        "host": (xhttp or ws).get("host") or ((ws.get("headers") or {}).get("Host")),
+        "mode": xhttp.get("mode"), "extra": json.dumps(xhttp.get("extra"), separators=(",", ":")) if xhttp.get("extra") else None,
+        "serviceName": grpc.get("serviceName"), "authority": grpc.get("authority"),
+        "alpn": ",".join(tls.get("alpn") or []), "allowInsecure": tls.get("allowInsecure"),
     })
 
 
@@ -633,7 +679,7 @@ def collect_candidates(sources):
             try:
                 items = parse_source(future.result())
                 if not items:
-                    raise ValueError("no supported VLESS Reality TCP nodes")
+                    raise ValueError("no supported secure VLESS nodes")
                 sampled = rotating_source_sample(name, items, MAX_CANDIDATES_PER_SOURCE)
                 source_keys = set()
                 for item in sampled:
@@ -677,25 +723,62 @@ def xray_outbound(item):
     user = {"id": item["uuid"], "encryption": item["encryption"]}
     if item["flow"]:
         user["flow"] = item["flow"]
+    pin_ip = item["security"] == "reality" and item["network"] in {"tcp", "raw"}
+    stream = {
+        "network": "raw" if item["network"] in {"tcp", "raw"} else item["network"],
+        "security": item["security"],
+    }
+    if item["security"] == "reality":
+        stream["realitySettings"] = {
+            "show": False, "fingerprint": item["fingerprint"], "serverName": item["sni"],
+            "publicKey": item["public_key"], "shortId": item["short_id"], "spiderX": item["spider_x"],
+        }
+    else:
+        tls = {
+            "fingerprint": item["fingerprint"], "serverName": item["sni"],
+            "allowInsecure": False,
+        }
+        if item.get("alpn"):
+            tls["alpn"] = [value.strip() for value in item["alpn"].split(",") if value.strip()]
+        stream["tlsSettings"] = tls
+    if item["network"] == "ws":
+        stream["wsSettings"] = {"path": item.get("path") or "/"}
+        if item.get("host"):
+            stream["wsSettings"]["host"] = item["host"]
+    elif item["network"] == "grpc":
+        stream["grpcSettings"] = {"serviceName": item.get("service_name") or ""}
+        if item.get("authority"):
+            stream["grpcSettings"]["authority"] = item["authority"]
+    elif item["network"] == "xhttp":
+        xhttp = {"path": item.get("path") or "/", "mode": item.get("mode") or "auto"}
+        if item.get("host"):
+            xhttp["host"] = item["host"]
+        if item.get("extra"):
+            try:
+                extra = json.loads(item["extra"])
+            except (TypeError, ValueError):
+                extra = None
+            if isinstance(extra, dict):
+                xhttp["extra"] = extra
+        stream["xhttpSettings"] = xhttp
+    elif item["network"] == "httpupgrade":
+        stream["httpupgradeSettings"] = {"path": item.get("path") or "/"}
+        if item.get("host"):
+            stream["httpupgradeSettings"]["host"] = item["host"]
     return {
         "protocol": "vless",
         "settings": {"vnext": [{
-            "address": item.get("resolved_ip") or item["address"],
+            "address": (item.get("resolved_ip") or item["address"]) if pin_ip else item["address"],
             "port": item["port"], "users": [user],
         }]},
-        "streamSettings": {
-            "network": "raw" if item["network"] == "raw" else "tcp", "security": "reality",
-            "realitySettings": {
-                "show": False, "fingerprint": item["fingerprint"], "serverName": item["sni"],
-                "publicKey": item["public_key"], "shortId": item["short_id"], "spiderX": item["spider_x"],
-            },
-        },
+        "streamSettings": stream,
         "tag": "proxy",
     }
 
 
 def rendered_vless_uri(item):
-    address = item.get("resolved_ip") or item["address"]
+    pin_ip = item["security"] == "reality" and item["network"] in {"tcp", "raw"}
+    address = (item.get("resolved_ip") or item["address"]) if pin_ip else item["address"]
     uri_address = f"[{address}]" if ":" in address and not address.startswith("[") else address
     query = item["base"].split("?", 1)[1]
     return f"vless://{quote(str(item['uuid']), safe='-')}@{uri_address}:{item['port']}?{query}"
@@ -995,6 +1078,36 @@ def take_unique(rows, limit):
     return selected
 
 
+def mixed_test_pool(located, limit):
+    """Reserve probe capacity for mobile-friendly transports.
+
+    Previously the nearest/fastest pool filled with RAW Reality nodes before
+    XHTTP/WS/gRPC candidates were even tested.  We test both families, then
+    let the full handshake, Telegram and throughput probes decide.
+    """
+    mobile = [row for row in located if mobile_transport(row[1])]
+    raw = [row for row in located if not mobile_transport(row[1])]
+    ordered = (
+        take_unique(sorted(mobile, key=moscow_rank_key), max(1, limit // 2))
+        + take_unique(sorted(mobile, key=lambda row: row[0]), max(1, limit // 4))
+        + take_unique(sorted(raw, key=moscow_rank_key), max(1, limit // 3))
+        + take_unique(sorted(raw, key=lambda row: row[0]), max(1, limit // 3))
+    )
+    return take_unique(ordered, limit)
+
+
+def select_publish_mix(rows, limit):
+    """Put verified mobile-friendly nodes first, retaining RAW fallbacks."""
+    mobile = [row for row in rows if mobile_transport(row[1])]
+    raw = [row for row in rows if not mobile_transport(row[1])]
+    mobile_target = min(len(mobile), max(1, (limit * 2) // 3))
+    selected = mobile[:mobile_target]
+    selected.extend(raw[:max(0, limit - len(selected))])
+    if len(selected) < limit:
+        selected.extend(mobile[mobile_target:mobile_target + limit - len(selected)])
+    return selected[:limit]
+
+
 def write_generation_status(
     success, selected_count, candidates, reality_ok, eligible, message="",
     stable=None, russia_reachable=None,
@@ -1055,20 +1168,9 @@ def main():
         geo = geo_by_ip.get(item["resolved_ip"])
         if geo and geo.get("code") != "RU" and math.isfinite(distance_from_moscow_km(geo)):
             located.append((tcp_latency, item, geo))
-    nearest = take_unique(sorted(located, key=moscow_rank_key), NEAREST_POOL_LIMIT)
-    fastest = take_unique(
-        sorted(located, key=lambda row: (row[0], len(row[1]["endpoint_sources"]))),
-        FASTEST_POOL_LIMIT,
-    )
-    test_pool, pooled_keys = [], set()
-    for row in nearest + fastest:
-        key = history_key(row[1])
-        if key not in pooled_keys:
-            pooled_keys.add(key)
-            test_pool.append(row)
-        if len(test_pool) >= REALITY_TEST_LIMIT:
-            break
-    print(f"Reality pool: {len(nearest)} nearest to Moscow + {len(fastest)} fastest from runner = {len(test_pool)} unique")
+    test_pool = mixed_test_pool(located, REALITY_TEST_LIMIT)
+    mobile_pool = sum(mobile_transport(row[1]) for row in test_pool)
+    print(f"VLESS pool: {len(test_pool)} unique; {mobile_pool} HTTP-shaped and {len(test_pool) - mobile_pool} RAW")
 
     reality_ok, current_results, items_by_key = [], {}, {}
     with ThreadPoolExecutor(max_workers=REALITY_TEST_WORKERS) as pool:
@@ -1164,7 +1266,7 @@ def main():
                 advanced[history_key(row[1])]["throughput_mbps"],
             ),
         ))
-    selected = publishable[:LIMIT]
+    selected = select_publish_mix(publishable, LIMIT)
     if len(selected) < MIN_SERVERS:
         message = (
             f"Only {len(selected)} endpoints passed full quality and stability checks; "
@@ -1179,12 +1281,19 @@ def main():
 
     lines = [tested_routing_link(), "#routing-enable: 1", "#profile-update-interval: 1",
              "#subscription-auto-update-open-enable: 1", "#subscription-ping-onopen-enabled: 1",
-             "#subscriptions-sort-type: ping", "#profile-title: Fast VPN"]
+             "#subscriptions-sort-type: ping", "#ping-type: proxy",
+             "#check-url-via-proxy: https://cp.cloudflare.com/generate_204",
+             "#proxy-ping-timeout: 12", "#proxy-ping-mode: double",
+             "#no-limit-xhttp-enabled: 1", "#fragmentation-enable: 1",
+             "#fragmentation-packets: tlshello", "#fragmentation-length: 50-100",
+             "#fragmentation-interval: 5", "#fragmentation-maxsplit: 100-200",
+             "#profile-title: Fast VPN"]
     for latency, item, geo in selected:
         location = geo["country"] + (f" · {geo['city']}" if geo["city"] else "")
         distance = round(distance_from_moscow_km(geo))
         speed = advanced[history_key(item)]["throughput_mbps"]
-        label = f"{geo['flag']} {location} · {distance} km · {speed:.1f} Mbps · {node_suffix(item)}"
+        transport = f"{item['network'].upper()}/{item['security'].upper()}"
+        label = f"{geo['flag']} {location} · {distance} km · {speed:.1f} Mbps · {transport} · {node_suffix(item)}"
         lines.append(f"{rendered_vless_uri(item)}#{quote(label, safe='')}")
         services = "+".join(name for name, ok in advanced[history_key(item)]["services"].items() if ok)
         print(
@@ -1201,7 +1310,7 @@ def main():
         stable=len(stable), russia_reachable=len(russian_reachable),
     )
     print(
-        f"Selected {len(selected)} diverse Reality servers from {len(candidates)} candidates; "
+        f"Selected {len(selected)} transport-diverse VLESS servers from {len(candidates)} candidates; "
         f"{len(reality_ok)} passed latency, {len(eligible)} passed quality, "
         f"{len(stable)} passed stability; {len(russian_reachable)} were preferred by Russian probes, "
         "and Happ will verify and sort them on each device"
