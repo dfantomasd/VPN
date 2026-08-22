@@ -262,7 +262,7 @@ def finalize(args):
     shutil.copy2(geosite, release / "geosite.dat")
     shutil.copy2(geoip, release / "geoip.dat")
     metadata = json.loads(Path(args.metadata).read_text(encoding="utf-8"))
-    version = args.version or datetime.now(timezone.utc).strftime("%Y%m%d%H%M")
+    version = args.version or str(int(datetime.now(timezone.utc).timestamp()))
     metadata.update({
         "version": version,
         "updated_at": datetime.now(timezone.utc).isoformat(),

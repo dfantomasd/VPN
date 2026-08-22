@@ -25,6 +25,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      XRAY_VERSION: v26.7.28
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -37,8 +39,32 @@ jobs:
 
       - name: Test Python code
         run: |
-          python3 -m py_compile build_routing_data.py refresh_subscription_routing.py update_vless.py
+          python3 -m py_compile build_routing_data.py refresh_subscription_routing.py update_vless.py validate_subscription.py
           python3 -m unittest -v
+
+      - name: Cache Xray
+        id: cache-xray
+        uses: actions/cache@v5
+        with:
+          path: ${{ runner.temp }}/xray
+          key: xray-${{ runner.os }}-${{ env.XRAY_VERSION }}
+
+      - name: Install verified Xray release
+        if: steps.cache-xray.outputs.cache-hit != 'true'
+        run: |
+          archive="$RUNNER_TEMP/Xray-linux-64.zip"
+          digest="$archive.dgst"
+          release="https://github.com/XTLS/Xray-core/releases/download/$XRAY_VERSION"
+          curl --fail --location --silent --show-error "$release/Xray-linux-64.zip" --output "$archive"
+          curl --fail --location --silent --show-error "$release/Xray-linux-64.zip.dgst" --output "$digest"
+          expected="$(awk -F'= ' '/SHA2-256/ {print $2}' "$digest")"
+          echo "$expected  $archive" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/xray"
+          unzip -q "$archive" -d "$RUNNER_TEMP/xray"
+          chmod +x "$RUNNER_TEMP/xray/xray"
+
+      - name: Configure Xray path
+        run: echo "XRAY_BIN=$RUNNER_TEMP/xray/xray" >> "$GITHUB_ENV"
 
       - name: Fetch GeoSite sources
         run: |
@@ -78,12 +104,15 @@ jobs:
             exit 0
           fi
           echo "changed=true" >> "$GITHUB_OUTPUT"
-          version="$(date -u +%Y%m%d%H%M)"
+          version="$(date -u +%s)"
           python3 build_routing_data.py finalize \
             --built-dir "$RUNNER_TEMP/routing-built" \
             --metadata "$RUNNER_TEMP/routing-input/metadata.json" \
             --version "$version"
           python3 refresh_subscription_routing.py
+
+      - name: Validate Happ subscription and routing databases
+        run: python3 validate_subscription.py
 
       - name: Commit routing update
         if: steps.changes.outputs.changed == 'true'

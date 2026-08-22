@@ -5,10 +5,12 @@ import re
 import subprocess
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from unittest import mock
 
 import update_vless
 import build_routing_data
+import validate_subscription
 
 
 SAMPLE = ("vless://11111111-1111-1111-1111-111111111111@203.0.113.10:443"
@@ -57,14 +59,24 @@ class ParserTests(unittest.TestCase):
         self.assertLess(update_vless.distance_from_moscow_km(helsinki[2]), 1000)
         self.assertGreater(update_vless.distance_from_moscow_km(los_angeles[2]), 9000)
 
-    def test_diversity_reuses_uuid_only_as_fallback(self):
+    def test_diversity_caps_uuid_reuse(self):
         def row(ip, uid, latency):
             item = update_vless.parse_vless_uri(f"vless://{uid}@{ip}:443?type=tcp&security=reality&pbk=key&sni=x")
             item["resolved_ip"] = ip
             return latency, item, {"asn": "", "code": "", "country": "", "city": "", "flag": ""}
-        rows = [row("203.0.113.1", "shared", 10), row("198.51.100.1", "shared", 11), row("192.0.2.1", "unique", 12)]
-        selected = update_vless.select_diverse(rows, 3)
+        rows = [
+            row("203.0.113.1", "shared", 10), row("198.51.100.1", "shared", 11),
+            row("192.0.2.1", "unique", 12), row("198.18.0.1", "shared", 13),
+        ]
+        selected = update_vless.select_diverse(rows, 4)
         self.assertEqual([item["uuid"] for _, item, _ in selected], ["shared", "unique", "shared"])
+
+    def test_rendered_uri_uses_tested_ip_to_avoid_client_dns(self):
+        item = update_vless.parse_vless_uri(SAMPLE.replace("203.0.113.10", "edge.example.com"))
+        item["resolved_ip"] = "203.0.113.20"
+        rendered = update_vless.rendered_vless_uri(item)
+        self.assertIn("@203.0.113.20:443?", rendered)
+        self.assertIn("sni=example.com", rendered)
 
     def test_routing_profile_covers_ru_and_telegram(self):
         profile = update_vless.routing_profile()
@@ -88,6 +100,8 @@ class ParserTests(unittest.TestCase):
         self.assertIn("geoip:ru", profile["DirectIp"])
         self.assertIn("geoip:by", profile["DirectIp"])
         self.assertIn("geosite:telegram", profile["ProxySites"])
+        self.assertIn("domain:t.me", profile["ProxySites"])
+        self.assertIn("domain:telegram.org", profile["ProxySites"])
         self.assertIn("geosite:ru-blocked", profile["ProxySites"])
         self.assertIn("geosite:ru-geoblock", profile["ProxySites"])
         self.assertIn("geoip:ru-blocked", profile["ProxyIp"])
@@ -102,10 +116,43 @@ class ParserTests(unittest.TestCase):
         payload = link.split("/onadd/", 1)[1]
         imported = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
         self.assertEqual(imported["Name"], "SIMUTIN")
-        self.assertRegex(imported["LastUpdated"], re.compile(r"^\d{12}$"))
+        self.assertRegex(imported["LastUpdated"], re.compile(r"^\d{9,11}$"))
+        self.assertGreater(int(imported["LastUpdated"]), 1_500_000_000)
+        self.assertLess(int(imported["LastUpdated"]), 4_000_000_000)
         self.assertIn("geoip:ru-blocked", imported["ProxyIp"])
         self.assertIn("149.154.160.0/20", imported["ProxyIp"])
         self.assertTrue(imported["Geositeurl"].endswith("?v=" + imported["LastUpdated"]))
+        self.assertIn("cdn.jsdelivr.net", imported["Geositeurl"])
+        self.assertEqual(imported["DomesticDNSType"], "DoU")
+        self.assertEqual(link, update_vless.tested_routing_link(profile["ProxyIp"]))
+
+    def test_legacy_routing_revision_is_converted_to_unix_time(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "status.json")
+            with open(path, "w", encoding="utf-8") as output:
+                json.dump({"version": "202608220416"}, output)
+            with mock.patch.object(update_vless, "ROUTING_STATUS_FILE", path):
+                revision = update_vless.routing_revision()
+        expected = int(datetime(2026, 8, 22, 4, 16, tzinfo=timezone.utc).timestamp())
+        self.assertEqual(int(revision), expected)
+
+    def test_telegram_dc_requires_multiple_reachable_endpoints(self):
+        with mock.patch.object(update_vless, "TELEGRAM_DC_ENDPOINTS", (("one", 443), ("two", 443), ("three", 443))):
+            with mock.patch.object(update_vless, "TELEGRAM_DC_MIN_SUCCESS", 2):
+                with mock.patch.object(update_vless, "socks5_tcp_connect_check", side_effect=[True, False, True]):
+                    self.assertTrue(update_vless.telegram_dc_check(1080))
+                with mock.patch.object(update_vless, "socks5_tcp_connect_check", side_effect=[True, False, False]):
+                    self.assertFalse(update_vless.telegram_dc_check(1080))
+
+    def test_xray_rules_preserve_happ_route_order(self):
+        profile = {
+            "RouteOrder": "block-proxy-direct",
+            "BlockSites": ["domain:ads.example"], "BlockIp": [],
+            "ProxySites": ["geosite:telegram"], "ProxyIp": ["149.154.160.0/20"],
+            "DirectSites": ["domain:ru"], "DirectIp": ["geoip:ru"],
+        }
+        rules = validate_subscription.xray_routing_rules(profile)
+        self.assertEqual([rule["outboundTag"] for rule in rules], ["block", "proxy", "proxy", "direct", "direct"])
 
     def test_routing_list_cleanup(self):
         domains = build_routing_data.clean_domains([

@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
   schedule:
     - cron: "17 * * * *"
+    - cron: "47 * * * *"
 
 permissions:
   contents: write
@@ -16,17 +17,43 @@ jobs:
   update:
     runs-on: ${{ vars.VPN_RUNNER || 'ubuntu-latest' }}
     env:
-      XRAY_VERSION: v26.3.27
+      XRAY_VERSION: v26.7.28
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Test generator
+      - name: Decide whether recovery run is needed
+        id: freshness
+        env:
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
         run: |
-          python3 -m py_compile update_vless.py test_update_vless.py
+          python3 - <<'PY'
+          from datetime import datetime, timezone
+          import json
+          import os
+
+          should_run = True
+          if os.environ.get("EVENT_SCHEDULE") == "47 * * * *":
+              try:
+                  status = json.load(open("generation_status.json", encoding="utf-8"))
+                  last = datetime.fromisoformat(status["last_success_at"])
+                  age = (datetime.now(timezone.utc) - last).total_seconds()
+                  should_run = age >= 45 * 60
+              except (OSError, KeyError, TypeError, ValueError):
+                  should_run = True
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"run={'true' if should_run else 'false'}\n")
+          print("Run generator" if should_run else "Fresh primary result exists; recovery run skipped")
+          PY
+
+      - name: Test generator
+        if: steps.freshness.outputs.run == 'true'
+        run: |
+          python3 -m py_compile update_vless.py validate_subscription.py test_update_vless.py
           python3 -m unittest -v
 
       - name: Restore geolocation cache
+        if: steps.freshness.outputs.run == 'true'
         uses: actions/cache@v5
         with:
           path: .cache/geo.json
@@ -35,6 +62,7 @@ jobs:
             geo-${{ runner.os }}-
 
       - name: Cache Xray
+        if: steps.freshness.outputs.run == 'true'
         id: cache-xray
         uses: actions/cache@v5
         with:
@@ -42,7 +70,7 @@ jobs:
           key: xray-${{ runner.os }}-${{ env.XRAY_VERSION }}
 
       - name: Install verified Xray release
-        if: steps.cache-xray.outputs.cache-hit != 'true'
+        if: steps.freshness.outputs.run == 'true' && steps.cache-xray.outputs.cache-hit != 'true'
         run: |
           archive="$RUNNER_TEMP/Xray-linux-64.zip"
           digest="$archive.dgst"
@@ -56,10 +84,12 @@ jobs:
           chmod +x "$RUNNER_TEMP/xray/xray"
 
       - name: Configure Xray path
+        if: steps.freshness.outputs.run == 'true'
         run: |
           echo "XRAY_BIN=$RUNNER_TEMP/xray/xray" >> "$GITHUB_ENV"
 
       - name: Generate subscription
+        if: steps.freshness.outputs.run == 'true'
         id: generate
         env:
           VLESS_LIMIT: "20"
@@ -67,12 +97,16 @@ jobs:
           REALITY_TEST_WORKERS: "8"
           GEO_WORKERS: "8"
           ADVANCED_TEST_WORKERS: "6"
-          FINALIST_LIMIT: "30"
+          FINALIST_LIMIT: "50"
           SOURCE_ROTATION_SECONDS: "3600"
         run: python3 update_vless.py
 
+      - name: Validate generated Happ subscription
+        if: steps.freshness.outputs.run == 'true'
+        run: python3 validate_subscription.py
+
       - name: Publish health summary
-        if: always()
+        if: always() && steps.freshness.outputs.run == 'true'
         env:
           GENERATE_OUTCOME: ${{ steps.generate.outcome }}
         run: |
@@ -111,6 +145,7 @@ jobs:
           PY
 
       - name: Commit changes
+        if: steps.freshness.outputs.run == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
