@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from unittest import mock
 
 import update_vless
+import update_hy2
 import build_routing_data
 import validate_subscription
 
@@ -25,6 +26,25 @@ XHTTP_REALITY = ("vless://33333333-3333-3333-3333-333333333333@edge.example.com:
 
 
 class ParserTests(unittest.TestCase):
+    def test_happ_hysteria2_parser_accepts_both_schemes(self):
+        secure = "hysteria2://secret@hy.example.com:443?sni=hy.example.com"
+        public = "hy2://secret@203.0.113.9:8443?insecure=1&sni=bing.com"
+        self.assertTrue(update_hy2.parse_hy2_uri(secure)["authenticated_tls"])
+        self.assertFalse(update_hy2.parse_hy2_uri(public)["authenticated_tls"])
+
+    def test_hysteria2_parser_rejects_ip_without_sni(self):
+        self.assertIsNone(update_hy2.parse_hy2_uri("hy2://secret@203.0.113.9:443"))
+
+    def test_public_hysteria2_can_be_disabled(self):
+        public = "hy2://secret@203.0.113.9:8443?insecure=1&sni=bing.com"
+        with mock.patch.object(update_hy2, "ALLOW_PUBLIC_INSECURE", False):
+            self.assertIsNone(update_hy2.parse_hy2_uri(public))
+
+    def test_hysteria2_subscription_decoder(self):
+        uri = "hysteria2://secret@hy.example.com:443?sni=hy.example.com"
+        encoded = base64.b64encode(uri.encode()).decode()
+        self.assertEqual(update_hy2.extract_candidates(encoded)[0]["uri"], uri)
+
     def test_published_subscription_enables_device_health_sorting(self):
         with open("vless.txt", encoding="utf-8") as source:
             payload = source.read()
