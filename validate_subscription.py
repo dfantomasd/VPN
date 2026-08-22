@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path
 
 import update_vless
+import update_hy2
 
 
 ROUTE_FIELDS = {
@@ -51,11 +52,16 @@ def validate_files(plain_path, base64_path, minimum):
     if len(routing_lines) != 1 or lines[0] != routing_lines[0]:
         raise ValueError("subscription must contain one routing profile on its first line")
     profile = decode_routing_link(lines[0])
-    node_lines = [line for line in lines if line.startswith("vless://")]
-    nodes = [update_vless.parse_vless_uri(line) for line in node_lines]
-    if len(nodes) < minimum or any(node is None for node in nodes):
-        raise ValueError(f"subscription contains only {len(nodes)} valid nodes; minimum is {minimum}")
-    for line in node_lines:
+    vless_lines = [line for line in lines if line.startswith("vless://")]
+    hy2_lines = [line for line in lines if line.lower().startswith(("hysteria2://", "hy2://"))]
+    nodes = [update_vless.parse_vless_uri(line) for line in vless_lines]
+    if len(nodes) + len(hy2_lines) < minimum or any(node is None for node in nodes):
+        raise ValueError(
+            f"subscription contains only {len(nodes) + len(hy2_lines)} valid nodes; minimum is {minimum}"
+        )
+    if any(update_hy2.parse_hy2_uri(line) is None for line in hy2_lines):
+        raise ValueError("subscription contains an invalid Hysteria2 node")
+    for line in vless_lines:
         params = dict(update_vless.parse_qsl(update_vless.urlsplit(line).query, keep_blank_values=True))
         for field in ("fp", "sni"):
             if not params.get(field):
@@ -72,7 +78,7 @@ def validate_files(plain_path, base64_path, minimum):
     for field in ("Geositeurl", "Geoipurl"):
         if not str(profile.get(field) or "").startswith("https://"):
             raise ValueError(f"{field} must use HTTPS")
-    return profile, nodes
+    return profile, nodes, hy2_lines
 
 
 def validate_with_xray(profile, node, xray_bin, asset_dir):
@@ -113,10 +119,13 @@ def main():
     parser.add_argument("--xray", default=update_vless.XRAY_BIN)
     parser.add_argument("--asset-dir", default="routing-data")
     args = parser.parse_args()
-    profile, nodes = validate_files(args.plain, args.base64, args.minimum)
+    profile, nodes, hy2_lines = validate_files(args.plain, args.base64, args.minimum)
     for node in nodes:
         validate_with_xray(profile, node, args.xray, args.asset_dir)
-    print(f"Subscription OK: {len(nodes)} nodes, routing {profile['Name']}, revision {profile['LastUpdated']}")
+    print(
+        f"Subscription OK: {len(nodes)} VLESS + {len(hy2_lines)} HY2 nodes, "
+        f"routing {profile['Name']}, revision {profile['LastUpdated']}"
+    )
 
 
 if __name__ == "__main__":
