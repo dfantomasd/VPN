@@ -176,6 +176,7 @@ jobs:
               "",
               f"- Status: **{status.get('status', 'unknown')}**",
               f"- Selected: {status.get('selected_count', 'n/a')}",
+              f"- Verified CDN VLESS selected: {status.get('cdn_selected_count', 0)}",
               f"- HY2/QUIC selected: {status.get('hy2_selected_count', 0)}",
               f"- Passed stability: {status.get('stability_passed_count', 'n/a')}",
               f"- Reachable from Russia: {status.get('russia_reachable_count', 'n/a')}",

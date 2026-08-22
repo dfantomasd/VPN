@@ -45,11 +45,11 @@ class ParserTests(unittest.TestCase):
         encoded = base64.b64encode(uri.encode()).decode()
         self.assertEqual(update_hy2.extract_candidates(encoded)[0]["uri"], uri)
 
-    def test_published_subscription_enables_device_health_sorting(self):
+    def test_published_subscription_preserves_server_side_quality_order(self):
         with open("vless.txt", encoding="utf-8") as source:
             payload = source.read()
         self.assertIn("#subscription-ping-onopen-enabled: 1", payload)
-        self.assertIn("#subscriptions-sort-type: ping", payload)
+        self.assertIn("#subscriptions-sort-type: without", payload)
 
     def test_published_subscription_uses_real_proxy_ping_and_tls_fragmentation(self):
         with open("vless.txt", encoding="utf-8") as source:
@@ -90,6 +90,22 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(outbound["settings"]["vnext"][0]["address"], "edge.example.com")
         self.assertEqual(outbound["streamSettings"]["network"], "xhttp")
         self.assertEqual(outbound["streamSettings"]["xhttpSettings"]["mode"], "auto")
+
+    def test_json_httpupgrade_keeps_path_and_host(self):
+        config = {"outbounds": [{
+            "protocol": "vless",
+            "settings": {"vnext": [{"address": "edge.example.com", "port": 443, "users": [{
+                "id": "44444444-4444-4444-4444-444444444444", "encryption": "none",
+            }]}]},
+            "streamSettings": {
+                "network": "httpupgrade", "security": "tls",
+                "tlsSettings": {"serverName": "origin.example.com", "fingerprint": "chrome"},
+                "httpupgradeSettings": {"path": "/up", "host": "origin.example.com"},
+            },
+        }]}
+        item = update_vless.parse_source(json.dumps([config]))[0]
+        self.assertEqual(item["path"], "/up")
+        self.assertEqual(item["host"], "origin.example.com")
 
     def test_rejects_insecure_tls_nodes(self):
         self.assertIsNone(update_vless.parse_vless_uri(WS_TLS.replace("&path=", "&allowInsecure=1&path=")))
@@ -156,6 +172,35 @@ class ParserTests(unittest.TestCase):
         selected = update_vless.select_publish_mix(raw + mobile, 5)
         self.assertTrue(all(update_vless.mobile_transport(value[1]) for value in selected[:3]))
         self.assertEqual(len(selected), 5)
+
+    def test_cdn_detection_uses_official_ip_range_and_required_headers(self):
+        item = update_vless.parse_vless_uri(WS_TLS)
+        item["resolved_ip"] = "104.16.10.20"
+        networks = [("Cloudflare", update_vless.ipaddress.ip_network("104.16.0.0/13"))]
+        item["cdn_provider"] = update_vless.cdn_provider_for_ip(item["resolved_ip"], networks)
+        self.assertTrue(update_vless.cdn_transport(item))
+        item["host"] = ""
+        self.assertFalse(update_vless.cdn_transport(item))
+
+    def test_publish_mix_puts_verified_cdn_before_other_transports(self):
+        def row(uri, ip, latency, provider=""):
+            item = update_vless.parse_vless_uri(uri)
+            item["resolved_ip"] = ip
+            item["cdn_provider"] = provider
+            return latency, item, {}
+        raw = row(SAMPLE, "203.0.113.10", 1)
+        ordinary_ws = row(WS_TLS, "203.0.113.20", 2)
+        cdn_ws = row(WS_TLS.replace("22222222", "55555555"), "104.16.10.20", 30, "Cloudflare")
+        selected = update_vless.select_publish_mix([raw, ordinary_ws, cdn_ws], 3)
+        self.assertIs(selected[0][1], cdn_ws[1])
+
+    def test_hy2_is_inserted_after_leading_cdn_vless(self):
+        lines = [
+            "#profile-title: Fast VPN",
+            "vless://id@edge:443?x=1#Germany%20%C2%B7%20CDN-WS%2FTLS%20Cloudflare",
+            "vless://id@raw:443?x=1#Poland%20%C2%B7%20TCP%2FREALITY",
+        ]
+        self.assertEqual(update_hy2.hy2_insert_index(lines), 2)
 
     def test_probe_pool_reserves_capacity_for_mobile_transports(self):
         def row(uri, latency, suffix):
