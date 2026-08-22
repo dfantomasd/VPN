@@ -51,9 +51,19 @@ def validate_files(plain_path, base64_path, minimum):
     if len(routing_lines) != 1 or lines[0] != routing_lines[0]:
         raise ValueError("subscription must contain one routing profile on its first line")
     profile = decode_routing_link(lines[0])
-    nodes = [update_vless.parse_vless_uri(line) for line in lines if line.startswith("vless://")]
+    node_lines = [line for line in lines if line.startswith("vless://")]
+    nodes = [update_vless.parse_vless_uri(line) for line in node_lines]
     if len(nodes) < minimum or any(node is None for node in nodes):
         raise ValueError(f"subscription contains only {len(nodes)} valid nodes; minimum is {minimum}")
+    for line in node_lines:
+        params = dict(update_vless.parse_qsl(update_vless.urlsplit(line).query, keep_blank_values=True))
+        for field in ("fp", "sni", "pbk"):
+            if not params.get(field):
+                raise ValueError(f"published VLESS URI is missing {field}")
+    if profile.get("GlobalProxy") != "false":
+        raise ValueError("SIMUTIN must send unmatched traffic directly")
+    if profile.get("RouteOrder") != "block-direct-proxy":
+        raise ValueError("SIMUTIN must prioritize direct routing before proxy rules")
     revision = str(profile.get("LastUpdated") or "")
     if not re.fullmatch(r"\d{9,11}", revision):
         raise ValueError("LastUpdated must be a Unix timestamp")
@@ -64,17 +74,17 @@ def validate_files(plain_path, base64_path, minimum):
 
 
 def validate_with_xray(profile, first_node, xray_bin, asset_dir):
+    proxy = update_vless.xray_outbound(first_node)
+    direct = {"protocol": "freedom", "tag": "direct"}
+    block = {"protocol": "blackhole", "tag": "block"}
+    outbounds = [direct, proxy, block] if str(profile.get("GlobalProxy")).lower() == "false" else [proxy, direct, block]
     config = {
         "log": {"loglevel": "warning"},
         "inbounds": [{
             "listen": "127.0.0.1", "port": 10888, "protocol": "socks",
             "settings": {"udp": True},
         }],
-        "outbounds": [
-            update_vless.xray_outbound(first_node),
-            {"protocol": "freedom", "tag": "direct"},
-            {"protocol": "blackhole", "tag": "block"},
-        ],
+        "outbounds": outbounds,
         "routing": {
             "domainStrategy": profile["DomainStrategy"],
             "rules": xray_routing_rules(profile),

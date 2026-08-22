@@ -78,10 +78,36 @@ class ParserTests(unittest.TestCase):
         self.assertIn("@203.0.113.20:443?", rendered)
         self.assertIn("sni=example.com", rendered)
 
+    def test_published_uri_contains_the_fingerprint_used_by_xray(self):
+        item = update_vless.parse_vless_uri(SAMPLE.replace("&fp=chrome", ""))
+        self.assertEqual(item["fingerprint"], "chrome")
+        self.assertIn("fp=chrome", update_vless.rendered_vless_uri(item))
+
+    def test_xray_uses_the_same_resolved_ip_that_is_published(self):
+        item = update_vless.parse_vless_uri(SAMPLE.replace("203.0.113.10", "edge.example.com"))
+        item["resolved_ip"] = "203.0.113.20"
+        outbound = update_vless.xray_outbound(item)
+        self.assertEqual(outbound["settings"]["vnext"][0]["address"], "203.0.113.20")
+
+    def test_validator_rejects_a_published_uri_without_fingerprint(self):
+        with tempfile.TemporaryDirectory() as directory:
+            plain = os.path.join(directory, "vless.txt")
+            encoded = os.path.join(directory, "vless_base64.txt")
+            route = update_vless.tested_routing_link()
+            broken = SAMPLE.replace("&fp=chrome", "")
+            payload = f"{route}\n{broken}\n"
+            with open(plain, "w", encoding="utf-8") as output:
+                output.write(payload)
+            with open(encoded, "w", encoding="utf-8") as output:
+                output.write(base64.b64encode(payload.encode()).decode())
+            with self.assertRaisesRegex(ValueError, "missing fp"):
+                validate_subscription.validate_files(plain, encoded, 1)
+
     def test_routing_profile_covers_ru_and_telegram(self):
         profile = update_vless.routing_profile()
         self.assertEqual(profile["Name"], "SIMUTIN")
-        self.assertEqual(profile["RouteOrder"], "block-proxy-direct")
+        self.assertEqual(profile["GlobalProxy"], "false")
+        self.assertEqual(profile["RouteOrder"], "block-direct-proxy")
         self.assertIn("domain:ru", profile["DirectSites"])
         self.assertIn("domain:su", profile["DirectSites"])
         self.assertIn("domain:moscow", profile["DirectSites"])
@@ -104,8 +130,8 @@ class ParserTests(unittest.TestCase):
         self.assertIn("domain:telegram.org", profile["ProxySites"])
         self.assertIn("geosite:ru-blocked", profile["ProxySites"])
         self.assertIn("geosite:ru-geoblock", profile["ProxySites"])
-        self.assertIn("geoip:ru-blocked", profile["ProxyIp"])
-        self.assertIn("geoip:ru-geoblock", profile["ProxyIp"])
+        self.assertNotIn("geoip:ru-blocked", profile["ProxyIp"])
+        self.assertNotIn("geoip:ru-geoblock", profile["ProxyIp"])
         self.assertIn("149.154.160.0/20", profile["ProxyIp"])
         self.assertIn("domain:gemini.google.com", profile["ProxySites"])
         self.assertIn("domain:generativelanguage.googleapis.com", profile["ProxySites"])
@@ -119,7 +145,7 @@ class ParserTests(unittest.TestCase):
         self.assertRegex(imported["LastUpdated"], re.compile(r"^\d{9,11}$"))
         self.assertGreater(int(imported["LastUpdated"]), 1_500_000_000)
         self.assertLess(int(imported["LastUpdated"]), 4_000_000_000)
-        self.assertIn("geoip:ru-blocked", imported["ProxyIp"])
+        self.assertEqual(imported["GlobalProxy"], "false")
         self.assertIn("149.154.160.0/20", imported["ProxyIp"])
         self.assertTrue(imported["Geositeurl"].endswith("?v=" + imported["LastUpdated"]))
         self.assertIn("cdn.jsdelivr.net", imported["Geositeurl"])
@@ -146,13 +172,37 @@ class ParserTests(unittest.TestCase):
 
     def test_xray_rules_preserve_happ_route_order(self):
         profile = {
-            "RouteOrder": "block-proxy-direct",
+            "RouteOrder": "block-direct-proxy",
             "BlockSites": ["domain:ads.example"], "BlockIp": [],
             "ProxySites": ["geosite:telegram"], "ProxyIp": ["149.154.160.0/20"],
             "DirectSites": ["domain:ru"], "DirectIp": ["geoip:ru"],
         }
         rules = validate_subscription.xray_routing_rules(profile)
-        self.assertEqual([rule["outboundTag"] for rule in rules], ["block", "proxy", "proxy", "direct", "direct"])
+        self.assertEqual([rule["outboundTag"] for rule in rules], ["block", "direct", "direct", "proxy", "proxy"])
+
+    def test_stability_requires_repeated_strict_passes(self):
+        item = update_vless.parse_vless_uri(SAMPLE)
+        item["resolved_ip"] = "203.0.113.10"
+        strict = {
+            "success": True, "quality_ok": True, "telegram_dc": True,
+            "udp": True, "throughput_mbps": 8,
+            "services": {"telegram": True, "gemini": True},
+        }
+        history = {"servers": {update_vless.history_key(item): {"samples": [strict, strict]}}}
+        self.assertEqual(update_vless.strict_pass_count(item, history), 2)
+
+    def test_russian_probe_cache_is_shared_by_endpoint(self):
+        first = update_vless.parse_vless_uri(SAMPLE)
+        second = update_vless.parse_vless_uri(SAMPLE.replace("11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"))
+        for item in (first, second):
+            item["resolved_ip"] = "203.0.113.10"
+        history = {"servers": {update_vless.history_key(first): {
+            "endpoint": "203.0.113.10:443",
+            "ru_probe": {"checked_at": 1000, "ok": True, "success_count": 2, "probe_count": 2},
+        }}}
+        cached = update_vless.cached_ru_probe(second, history, now=1001)
+        self.assertTrue(cached["ok"])
+        self.assertTrue(cached["cached"])
 
     def test_routing_list_cleanup(self):
         domains = build_routing_data.clean_domains([
