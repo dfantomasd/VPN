@@ -30,6 +30,8 @@ DEFAULT_SOURCES = [
     ("proxy-collector", "https://raw.githubusercontent.com/Mahdi0024/ProxyCollector/master/sub/proxies.txt"),
     ("barry-far", "https://raw.githubusercontent.com/barry-far/V2ray-Config/main/Splitted-By-Protocol/vless.txt"),
     ("radikal", "https://raw.githubusercontent.com/0xRadikal/Free-v2ray-Configs/main/protocols/vless.txt"),
+    ("matin-ghanbari", "https://raw.githubusercontent.com/MatinGhanbari/v2ray-configs/main/subscriptions/filtered/subs/vless.txt"),
+    ("fastnodes", "https://raw.githubusercontent.com/rtwo2/FastNodes/main/sub/protocols/vless.txt"),
 ]
 ROUTING_PROFILE_FILE = "routing_profile.json"
 LIMIT = int(os.getenv("VLESS_LIMIT", "30"))
@@ -96,6 +98,10 @@ XRAY_BIN = os.getenv("XRAY_BIN", "xray")
 CURL_BIN = os.getenv("CURL_BIN", "curl")
 MOSCOW_LATITUDE = 55.7558
 MOSCOW_LONGITUDE = 37.6173
+CDN_RANGE_SOURCES = (
+    ("Cloudflare", "https://www.cloudflare.com/ips-v4", "text"),
+    ("Cloudflare", "https://www.cloudflare.com/ips-v6", "text"),
+)
 
 
 def configured_sources():
@@ -141,6 +147,41 @@ def fetch_text(url, timeout=60):
 
 def fetch_json(url, timeout=30):
     return json.loads(fetch_text(url, timeout))
+
+
+def fetch_cdn_networks():
+    """Load authoritative edge ranges instead of guessing from a hostname.
+
+    Only transports whose tested destination resolves inside a CDN's published
+    range are marked CDN.  A source calling a random VPS "Cloudflare" is not
+    enough.
+    """
+    networks = []
+    for provider, url, source_type in CDN_RANGE_SOURCES:
+        try:
+            payload = fetch_text(url, timeout=20)
+            if source_type == "fastly-json":
+                data = json.loads(payload)
+                values = list(data.get("addresses") or []) + list(data.get("ipv6_addresses") or [])
+            else:
+                values = [line.strip() for line in payload.splitlines() if line.strip()]
+            parsed = [(provider, ipaddress.ip_network(value, strict=False)) for value in values]
+            networks.extend(parsed)
+            print(f"CDN ranges {provider}: +{len(parsed)} from {url}")
+        except (OSError, ValueError, TypeError) as exc:
+            print(f"::warning title=CDN range source unavailable::{provider}: {exc}")
+    return networks
+
+
+def cdn_provider_for_ip(ip, networks):
+    try:
+        address = ipaddress.ip_address(ip)
+    except ValueError:
+        return ""
+    for provider, network in networks:
+        if address.version == network.version and address in network:
+            return provider
+    return ""
 
 
 def request_json(url, payload=None, timeout=30):
@@ -491,6 +532,17 @@ def mobile_transport(item):
     return item.get("network") not in {"tcp", "raw"}
 
 
+def cdn_transport(item):
+    """Return true only for a tested TLS HTTP transport on a known CDN edge."""
+    return bool(
+        item.get("cdn_provider")
+        and item.get("security") == "tls"
+        and item.get("network") in {"ws", "httpupgrade"}
+        and item.get("sni")
+        and item.get("host")
+    )
+
+
 def quality_score(row, history, throughput_mbps=None):
     latency, item, geo = row
     stats = history_stats(item, history)
@@ -583,6 +635,7 @@ def parse_vless_outbound(outbound):
     ws = stream.get("wsSettings") or {}
     grpc = stream.get("grpcSettings") or {}
     xhttp = stream.get("xhttpSettings") or {}
+    httpupgrade = stream.get("httpupgradeSettings") or {}
     address, port, uid = server.get("address"), server.get("port"), user.get("id")
     if not all((address, port, uid)):
         return None
@@ -592,8 +645,9 @@ def parse_vless_outbound(outbound):
         "sni": (reality if security == "reality" else tls).get("serverName"),
         "fp": (reality if security == "reality" else tls).get("fingerprint"),
         "pbk": reality.get("publicKey"), "sid": reality.get("shortId"), "spx": reality.get("spiderX"),
-        "path": (xhttp or ws).get("path"),
-        "host": (xhttp or ws).get("host") or ((ws.get("headers") or {}).get("Host")),
+        "path": (xhttp or ws or httpupgrade).get("path"),
+        "host": ((xhttp or ws or httpupgrade).get("host")
+                 or ((ws.get("headers") or {}).get("Host"))),
         "mode": xhttp.get("mode"), "extra": json.dumps(xhttp.get("extra"), separators=(",", ":")) if xhttp.get("extra") else None,
         "serviceName": grpc.get("serviceName"), "authority": grpc.get("authority"),
         "alpn": ",".join(tls.get("alpn") or []), "allowInsecure": tls.get("allowInsecure"),
@@ -1085,10 +1139,13 @@ def mixed_test_pool(located, limit):
     XHTTP/WS/gRPC candidates were even tested.  We test both families, then
     let the full handshake, Telegram and throughput probes decide.
     """
-    mobile = [row for row in located if mobile_transport(row[1])]
+    cdn = [row for row in located if cdn_transport(row[1])]
+    mobile = [row for row in located if mobile_transport(row[1]) and not cdn_transport(row[1])]
     raw = [row for row in located if not mobile_transport(row[1])]
     ordered = (
-        take_unique(sorted(mobile, key=moscow_rank_key), max(1, limit // 2))
+        take_unique(sorted(cdn, key=moscow_rank_key), max(1, limit // 2))
+        + take_unique(sorted(cdn, key=lambda row: row[0]), max(1, limit // 3))
+        + take_unique(sorted(mobile, key=moscow_rank_key), max(1, limit // 2))
         + take_unique(sorted(mobile, key=lambda row: row[0]), max(1, limit // 4))
         + take_unique(sorted(raw, key=moscow_rank_key), max(1, limit // 3))
         + take_unique(sorted(raw, key=lambda row: row[0]), max(1, limit // 3))
@@ -1097,11 +1154,13 @@ def mixed_test_pool(located, limit):
 
 
 def select_publish_mix(rows, limit):
-    """Put verified mobile-friendly nodes first, retaining RAW fallbacks."""
-    mobile = [row for row in rows if mobile_transport(row[1])]
+    """Publish verified CDN first, then other HTTP and RAW fallbacks."""
+    cdn = [row for row in rows if cdn_transport(row[1])]
+    mobile = [row for row in rows if mobile_transport(row[1]) and not cdn_transport(row[1])]
     raw = [row for row in rows if not mobile_transport(row[1])]
+    selected = cdn[:limit]
     mobile_target = min(len(mobile), max(1, (limit * 2) // 3))
-    selected = mobile[:mobile_target]
+    selected.extend(mobile[:max(0, min(mobile_target, limit - len(selected)))])
     selected.extend(raw[:max(0, limit - len(selected))])
     if len(selected) < limit:
         selected.extend(mobile[mobile_target:mobile_target + limit - len(selected)])
@@ -1110,7 +1169,7 @@ def select_publish_mix(rows, limit):
 
 def write_generation_status(
     success, selected_count, candidates, reality_ok, eligible, message="",
-    stable=None, russia_reachable=None,
+    stable=None, russia_reachable=None, cdn_selected=None,
 ):
     now = datetime.now(timezone.utc)
     previous = load_json_file(STATUS_FILE, {})
@@ -1133,6 +1192,7 @@ def write_generation_status(
         "quality_passed_count": eligible,
         "stability_passed_count": stable,
         "russia_reachable_count": russia_reachable,
+        "cdn_selected_count": cdn_selected,
         "minimum_required": MIN_SERVERS,
         "message": message,
     }
@@ -1163,14 +1223,20 @@ def main():
                 reachable.append((latency, item))
     reachable.sort(key=lambda value: (value[0], len(value[1]["endpoint_sources"])))
     geo_by_ip = geolocate_ips(item["resolved_ip"] for _, item in reachable)
+    cdn_networks = fetch_cdn_networks()
     located = []
     for tcp_latency, item in reachable:
         geo = geo_by_ip.get(item["resolved_ip"])
         if geo and geo.get("code") != "RU" and math.isfinite(distance_from_moscow_km(geo)):
+            item["cdn_provider"] = cdn_provider_for_ip(item["resolved_ip"], cdn_networks)
             located.append((tcp_latency, item, geo))
     test_pool = mixed_test_pool(located, REALITY_TEST_LIMIT)
     mobile_pool = sum(mobile_transport(row[1]) for row in test_pool)
-    print(f"VLESS pool: {len(test_pool)} unique; {mobile_pool} HTTP-shaped and {len(test_pool) - mobile_pool} RAW")
+    cdn_pool = sum(cdn_transport(row[1]) for row in test_pool)
+    print(
+        f"VLESS pool: {len(test_pool)} unique; {cdn_pool} verified CDN, "
+        f"{mobile_pool - cdn_pool} other HTTP-shaped and {len(test_pool) - mobile_pool} RAW"
+    )
 
     reality_ok, current_results, items_by_key = [], {}, {}
     with ThreadPoolExecutor(max_workers=REALITY_TEST_WORKERS) as pool:
@@ -1276,12 +1342,13 @@ def main():
         write_generation_status(
             False, len(selected), len(candidates), len(reality_ok), len(eligible), message,
             stable=len(stable), russia_reachable=len(russian_reachable),
+            cdn_selected=sum(cdn_transport(row[1]) for row in selected),
         )
         return
 
     lines = [tested_routing_link(), "#routing-enable: 1", "#profile-update-interval: 1",
              "#subscription-auto-update-open-enable: 1", "#subscription-ping-onopen-enabled: 1",
-             "#subscriptions-sort-type: ping", "#ping-type: proxy",
+             "#subscriptions-sort-type: without", "#ping-type: proxy",
              "#check-url-via-proxy: https://cp.cloudflare.com/generate_204",
              "#proxy-ping-timeout: 12", "#proxy-ping-mode: double",
              "#no-limit-xhttp-enabled: 1", "#fragmentation-enable: 1",
@@ -1293,6 +1360,8 @@ def main():
         distance = round(distance_from_moscow_km(geo))
         speed = advanced[history_key(item)]["throughput_mbps"]
         transport = f"{item['network'].upper()}/{item['security'].upper()}"
+        if cdn_transport(item):
+            transport = f"CDN-{transport} {item['cdn_provider']}"
         label = f"{geo['flag']} {location} · {distance} km · {speed:.1f} Mbps · {transport} · {node_suffix(item)}"
         lines.append(f"{rendered_vless_uri(item)}#{quote(label, safe='')}")
         services = "+".join(name for name, ok in advanced[history_key(item)]["services"].items() if ok)
@@ -1308,6 +1377,7 @@ def main():
     write_generation_status(
         True, len(selected), len(candidates), len(reality_ok), len(eligible),
         stable=len(stable), russia_reachable=len(russian_reachable),
+        cdn_selected=sum(cdn_transport(row[1]) for row in selected),
     )
     print(
         f"Selected {len(selected)} transport-diverse VLESS servers from {len(candidates)} candidates; "
