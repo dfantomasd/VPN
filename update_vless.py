@@ -47,27 +47,35 @@ GEO_CACHE_FILE = os.getenv("GEO_CACHE_FILE", ".cache/geo.json")
 GEO_CACHE_TTL = int(os.getenv("GEO_CACHE_TTL", "86400"))
 FINALIST_LIMIT = int(os.getenv("FINALIST_LIMIT", "30"))
 ADVANCED_TEST_WORKERS = int(os.getenv("ADVANCED_TEST_WORKERS", "6"))
-THROUGHPUT_BYTES = int(os.getenv("THROUGHPUT_BYTES", "262144"))
+THROUGHPUT_BYTES = int(os.getenv("THROUGHPUT_BYTES", "1048576"))
 THROUGHPUT_TEST_URL = os.getenv(
     "THROUGHPUT_TEST_URL", f"https://speed.cloudflare.com/__down?bytes={THROUGHPUT_BYTES}"
 )
 THROUGHPUT_TEST_TIMEOUT = float(os.getenv("THROUGHPUT_TEST_TIMEOUT", "10"))
-MIN_THROUGHPUT_MBPS = float(os.getenv("MIN_THROUGHPUT_MBPS", "0.5"))
+MIN_THROUGHPUT_MBPS = float(os.getenv("MIN_THROUGHPUT_MBPS", "3.0"))
 UDP_TEST_TIMEOUT = float(os.getenv("UDP_TEST_TIMEOUT", "4"))
 SERVICE_TEST_TIMEOUT = float(os.getenv("SERVICE_TEST_TIMEOUT", "7"))
 SERVICE_TESTS = (
     ("telegram", os.getenv("TELEGRAM_TEST_URL", "https://api.telegram.org/botINVALID/getMe"), False),
     ("gemini", os.getenv("GEMINI_TEST_URL", "https://gemini.google.com/"), True),
 )
+TELEGRAM_DC_ENDPOINTS = tuple(
+    (host, int(port))
+    for host, port in (
+        value.rsplit(":", 1)
+        for value in os.getenv(
+            "TELEGRAM_DC_ENDPOINTS",
+            "149.154.167.50:443,149.154.175.100:443,91.108.56.100:443",
+        ).split(",")
+        if ":" in value
+    )
+)
+TELEGRAM_DC_MIN_SUCCESS = int(os.getenv("TELEGRAM_DC_MIN_SUCCESS", "2"))
 HISTORY_FILE = os.getenv("VLESS_HISTORY_FILE", "server_history.json")
 HISTORY_SAMPLES = int(os.getenv("VLESS_HISTORY_SAMPLES", "12"))
 STATUS_FILE = os.getenv("VLESS_STATUS_FILE", "generation_status.json")
 ROUTING_STATUS_FILE = os.getenv("ROUTING_STATUS_FILE", "routing_data_status.json")
 STALE_WARNING_HOURS = float(os.getenv("STALE_WARNING_HOURS", "6"))
-TELEGRAM_CIDR_URL = os.getenv(
-    "TELEGRAM_CIDR_URL", "https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/telegram.txt"
-)
-TELEGRAM_MIN_CIDRS = int(os.getenv("TELEGRAM_MIN_CIDRS", "8"))
 XRAY_BIN = os.getenv("XRAY_BIN", "xray")
 CURL_BIN = os.getenv("CURL_BIN", "curl")
 MOSCOW_LATITUDE = 55.7558
@@ -164,30 +172,22 @@ def parse_cidr_lines(text):
     return list(dict.fromkeys(networks))
 
 
-def current_telegram_cidrs(fallback):
-    try:
-        networks = parse_cidr_lines(fetch_text(TELEGRAM_CIDR_URL, 12))
-        if len(networks) < TELEGRAM_MIN_CIDRS:
-            raise ValueError(f"only {len(networks)} valid networks")
-        return networks
-    except Exception as exc:
-        print(f"Telegram CIDR refresh failed, using validated fallback: {exc}")
-        return parse_cidr_lines("\n".join(fallback))
-
-
 def routing_revision():
     override = os.getenv("ROUTING_REVISION", "").strip()
-    if re.fullmatch(r"\d{12}", override):
+    if re.fullmatch(r"\d{9,11}", override):
         return override
     try:
         with open(ROUTING_STATUS_FILE, encoding="utf-8") as source:
             status = json.load(source)
         version = str(status.get("version") or "")
-        if re.fullmatch(r"\d{12}", version):
+        if re.fullmatch(r"\d{9,11}", version):
             return version
+        if re.fullmatch(r"\d{12}", version):
+            legacy = datetime.strptime(version, "%Y%m%d%H%M").replace(tzinfo=timezone.utc)
+            return str(int(legacy.timestamp()))
     except (OSError, ValueError):
         pass
-    return datetime.now(timezone.utc).strftime("%Y%m%d%H%M")
+    return str(int(datetime.now(timezone.utc).timestamp()))
 
 
 def versioned_url(url, version):
@@ -200,7 +200,10 @@ def tested_routing_link(telegram_cidrs=None):
     static_proxy_ip = [rule for rule in profile["ProxyIp"] if rule.startswith("geoip:")]
     fallback_cidrs = parse_cidr_lines("\n".join(profile["ProxyIp"]))
     supplied_cidrs = parse_cidr_lines("\n".join(telegram_cidrs or []))
-    profile["ProxyIp"] = static_proxy_ip + (supplied_cidrs or current_telegram_cidrs(fallback_cidrs))
+    # Keep this profile byte-stable between GeoData releases. Happ imports the
+    # line on every subscription refresh; changing a live CIDR feed here used
+    # to cause needless in-place routing updates on iOS.
+    profile["ProxyIp"] = static_proxy_ip + (supplied_cidrs or fallback_cidrs)
     version = routing_revision()
     profile["LastUpdated"] = version
     profile["Geositeurl"] = versioned_url(profile["Geositeurl"], version)
@@ -357,13 +360,14 @@ def quality_score(row, history, throughput_mbps=None):
     latency, item, geo = row
     stats = history_stats(item, history)
     throughput = throughput_mbps or stats["throughput"] or MIN_THROUGHPUT_MBPS
-    reliability_penalty = (1.0 - stats["success_rate"]) * 1500
-    jitter_penalty = min(stats["jitter"], 1500) * 0.15
-    shared_penalty = max(0, len(item.get("endpoint_sources") or ()) - 1) * 200
-    latency_penalty = min(float(latency), MAX_REALITY_LATENCY_MS) * 0.15
-    throughput_penalty = 1200 / math.sqrt(max(float(throughput), 0.1))
+    reliability_penalty = (1.0 - stats["success_rate"]) * 2500
+    jitter_penalty = min(stats["jitter"], 1500) * 0.20
+    shared_penalty = max(0, len(item.get("endpoint_sources") or ()) - 1) * 250
+    latency_penalty = min(float(latency), MAX_REALITY_LATENCY_MS) * 0.35
+    throughput_penalty = 1800 / math.sqrt(max(float(throughput), 0.1))
+    distance_penalty = min(distance_from_moscow_km(geo), 10_000) * 0.15
     return (
-        distance_from_moscow_km(geo) + reliability_penalty + jitter_penalty
+        distance_penalty + reliability_penalty + jitter_penalty
         + shared_penalty + latency_penalty + throughput_penalty
     )
 
@@ -561,6 +565,13 @@ def xray_outbound(item):
     }
 
 
+def rendered_vless_uri(item):
+    address = item.get("resolved_ip") or item["address"]
+    uri_address = f"[{address}]" if ":" in address and not address.startswith("[") else address
+    query = item["base"].split("?", 1)[1]
+    return f"vless://{quote(str(item['uuid']), safe='-')}@{uri_address}:{item['port']}?{query}"
+
+
 def free_local_port():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
         listener.bind(("127.0.0.1", 0))
@@ -619,6 +630,51 @@ def recv_exact(connection, size):
         chunks.append(chunk)
         remaining -= len(chunk)
     return b"".join(chunks)
+
+
+def socks5_tcp_connect_check(port, host, target_port, timeout=SERVICE_TEST_TIMEOUT):
+    try:
+        address = ipaddress.ip_address(host)
+        atyp = b"\x01" if address.version == 4 else b"\x04"
+        encoded_host = address.packed
+    except ValueError:
+        encoded = host.encode("idna")
+        if len(encoded) > 255:
+            return False
+        atyp, encoded_host = b"\x03", bytes([len(encoded)]) + encoded
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=timeout) as connection:
+            connection.settimeout(timeout)
+            connection.sendall(b"\x05\x01\x00")
+            if recv_exact(connection, 2) != b"\x05\x00":
+                return False
+            request = b"\x05\x01\x00" + atyp + encoded_host + struct.pack("!H", target_port)
+            connection.sendall(request)
+            header = recv_exact(connection, 4)
+            if header[:2] != b"\x05\x00":
+                return False
+            if header[3] == 1:
+                recv_exact(connection, 4)
+            elif header[3] == 3:
+                recv_exact(connection, recv_exact(connection, 1)[0])
+            elif header[3] == 4:
+                recv_exact(connection, 16)
+            else:
+                return False
+            recv_exact(connection, 2)
+            return True
+    except OSError:
+        return False
+
+
+def telegram_dc_check(port):
+    if not TELEGRAM_DC_ENDPOINTS:
+        return False
+    successes = sum(
+        socks5_tcp_connect_check(port, host, target_port)
+        for host, target_port in TELEGRAM_DC_ENDPOINTS
+    )
+    return successes >= min(TELEGRAM_DC_MIN_SUCCESS, len(TELEGRAM_DC_ENDPOINTS))
 
 
 def socks5_udp_dns_check(port, timeout=UDP_TEST_TIMEOUT):
@@ -696,7 +752,10 @@ def advanced_probe(item):
         process = subprocess.Popen([XRAY_BIN, "run", "-c", config_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
             if not wait_for_port(port, process):
-                return {"throughput_mbps": 0.0, "udp": False}
+                return {
+                    "throughput_mbps": 0.0, "udp": False, "telegram_dc": False,
+                    "services": {name: False for name, _, _ in SERVICE_TESTS},
+                }
             result = subprocess.run([
                 CURL_BIN, "--silent", "--show-error", "--output", os.devnull,
                 "--write-out", "%{size_download} %{speed_download}",
@@ -705,21 +764,29 @@ def advanced_probe(item):
             ], capture_output=True, text=True, timeout=THROUGHPUT_TEST_TIMEOUT + 2, check=False)
             size, speed = (float(value) for value in result.stdout.strip().split()) if result.returncode == 0 else (0.0, 0.0)
             throughput = speed * 8 / 1_000_000 if size >= THROUGHPUT_BYTES * 0.8 else 0.0
-            with ThreadPoolExecutor(max_workers=len(SERVICE_TESTS) + 1) as checks:
+            with ThreadPoolExecutor(max_workers=len(SERVICE_TESTS) + 2) as checks:
                 service_futures = {
                     name: checks.submit(http_service_check, port, url, require_success)
                     for name, url, require_success in SERVICE_TESTS
                 }
                 udp_future = checks.submit(socks5_udp_dns_check, port)
+                telegram_dc_future = checks.submit(telegram_dc_check, port)
                 services = {name: future.result() for name, future in service_futures.items()}
                 try:
                     udp_ok = udp_future.result()
                 except OSError:
                     udp_ok = False
-            return {"throughput_mbps": throughput, "udp": udp_ok, "services": services}
+                try:
+                    telegram_dc_ok = telegram_dc_future.result()
+                except OSError:
+                    telegram_dc_ok = False
+            return {
+                "throughput_mbps": throughput, "udp": udp_ok,
+                "telegram_dc": telegram_dc_ok, "services": services,
+            }
         except (OSError, ValueError, subprocess.TimeoutExpired):
             return {
-                "throughput_mbps": 0.0, "udp": False,
+                "throughput_mbps": 0.0, "udp": False, "telegram_dc": False,
                 "services": {name: False for name, _, _ in SERVICE_TESTS},
             }
         finally:
@@ -751,6 +818,7 @@ def node_suffix(item):
 def select_diverse(tested, limit):
     selected = []
     used_endpoints, used_networks, used_uuids, used_asns, used_countries = set(), set(), set(), set(), set()
+    uuid_counts = {}
 
     def add_pass(unique_country):
         for latency, item, geo in tested:
@@ -763,6 +831,7 @@ def select_diverse(tested, limit):
                 continue
             selected.append((latency, item, geo))
             used_endpoints.add(endpoint); used_networks.add(subnet); used_uuids.add(item["uuid"])
+            uuid_counts[item["uuid"]] = uuid_counts.get(item["uuid"], 0) + 1
             if geo["asn"]: used_asns.add(geo["asn"])
             if geo["code"]: used_countries.add(geo["code"])
             if len(selected) >= limit:
@@ -774,10 +843,11 @@ def select_diverse(tested, limit):
     add_pass(False)
     for latency, item, geo in tested:
         endpoint, subnet = (item["resolved_ip"], item["port"]), network_key(item["resolved_ip"])
-        if endpoint in used_endpoints or subnet in used_networks:
+        if endpoint in used_endpoints or subnet in used_networks or uuid_counts.get(item["uuid"], 0) >= 2:
             continue
         selected.append((latency, item, geo))
         used_endpoints.add(endpoint); used_networks.add(subnet); used_uuids.add(item["uuid"])
+        uuid_counts[item["uuid"]] = uuid_counts.get(item["uuid"], 0) + 1
         if len(selected) >= limit:
             break
     return selected
@@ -893,7 +963,7 @@ def main():
                 result = future.result()
             except Exception:
                 result = {
-                    "throughput_mbps": 0.0, "udp": False,
+                    "throughput_mbps": 0.0, "udp": False, "telegram_dc": False,
                     "services": {name: False for name, _, _ in SERVICE_TESTS},
                 }
             key = history_key(row[1])
@@ -907,6 +977,7 @@ def main():
         services = result.get("services") or {}
         if (
             result.get("udp")
+            and result.get("telegram_dc")
             and all(services.get(name) for name, _, _ in SERVICE_TESTS)
             and float(result.get("throughput_mbps") or 0) >= MIN_THROUGHPUT_MBPS
         ):
@@ -923,14 +994,14 @@ def main():
         return
 
     lines = [tested_routing_link(), "#routing-enable: 1", "#profile-update-interval: 1",
-             "#subscription-auto-update-open-enable: 1", "#subscription-ping-onopen-enabled: 1",
-             "#subscriptions-sort-type: ping", "#profile-title: Fast VPN"]
+             "#subscription-auto-update-open-enable: 1", "#subscription-ping-onopen-enabled: 0",
+             "#subscriptions-sort-type: without", "#profile-title: Fast VPN"]
     for latency, item, geo in selected:
         location = geo["country"] + (f" · {geo['city']}" if geo["city"] else "")
         distance = round(distance_from_moscow_km(geo))
-        label = f"{geo['flag']} {location} · {distance} km · {node_suffix(item)}"
-        lines.append(f"{item['base']}#{quote(label, safe='')}")
         speed = advanced[history_key(item)]["throughput_mbps"]
+        label = f"{geo['flag']} {location} · {distance} km · {speed:.1f} Mbps · {node_suffix(item)}"
+        lines.append(f"{rendered_vless_uri(item)}#{quote(label, safe='')}")
         services = "+".join(name for name, ok in advanced[history_key(item)]["services"].items() if ok)
         print(
             f"{latency:7.1f} ms  {speed:6.2f} Mbps  UDP ok  {services} ok  "
