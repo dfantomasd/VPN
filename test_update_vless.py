@@ -118,6 +118,11 @@ class ParserTests(unittest.TestCase):
         self.assertIn("domain:su", profile["DirectSites"])
         self.assertIn("domain:moscow", profile["DirectSites"])
         self.assertIn("geosite:russia-inside", profile["DirectSites"])
+        for update_host in (
+            "domain:raw.githubusercontent.com", "domain:githubusercontent.com",
+            "domain:cdn.jsdelivr.net", "domain:jsdelivr.net",
+        ):
+            self.assertIn(update_host, profile["DirectSites"])
         for rule in (
             "geosite:category-bank-ru",
             "geosite:sber",
@@ -155,6 +160,7 @@ class ParserTests(unittest.TestCase):
         self.assertIn("149.154.160.0/20", imported["ProxyIp"])
         self.assertTrue(imported["Geositeurl"].endswith("?v=" + imported["LastUpdated"]))
         self.assertIn("cdn.jsdelivr.net", imported["Geositeurl"])
+        self.assertGreaterEqual(int(imported["LastUpdated"]), 1_787_392_410)
         self.assertEqual(imported["DomesticDNSType"], "DoU")
         self.assertEqual(link, update_vless.tested_routing_link(profile["ProxyIp"]))
 
