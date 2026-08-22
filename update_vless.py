@@ -29,7 +29,7 @@ DEFAULT_SOURCES = [
 ]
 ROUTING_PROFILE_FILE = "routing_profile.json"
 LIMIT = int(os.getenv("VLESS_LIMIT", "20"))
-MIN_SERVERS = int(os.getenv("VLESS_MIN_SERVERS", "10"))
+MIN_SERVERS = int(os.getenv("VLESS_MIN_SERVERS", "3"))
 PING_TIMEOUT = float(os.getenv("PING_TIMEOUT", "1.8"))
 PING_ATTEMPTS = int(os.getenv("PING_ATTEMPTS", "2"))
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", "24"))
@@ -73,6 +73,18 @@ TELEGRAM_DC_ENDPOINTS = tuple(
 TELEGRAM_DC_MIN_SUCCESS = int(os.getenv("TELEGRAM_DC_MIN_SUCCESS", "2"))
 HISTORY_FILE = os.getenv("VLESS_HISTORY_FILE", "server_history.json")
 HISTORY_SAMPLES = int(os.getenv("VLESS_HISTORY_SAMPLES", "12"))
+STABILITY_MIN_STRICT_PASSES = int(os.getenv("STABILITY_MIN_STRICT_PASSES", "2"))
+STABILITY_WINDOW = int(os.getenv("STABILITY_WINDOW", "8"))
+RU_PROBE_ENABLED = os.getenv("RU_PROBE_ENABLED", "1").strip().lower() not in {"0", "false", "no"}
+RU_PROBE_API = os.getenv("RU_PROBE_API", "https://api.globalping.io/v1/measurements")
+RU_PROBE_ASNS = tuple(
+    int(value) for value in os.getenv("RU_PROBE_ASNS", "8359,12389").split(",") if value.strip().isdigit()
+)
+RU_PROBE_PER_ASN = int(os.getenv("RU_PROBE_PER_ASN", "1"))
+RU_PROBE_MIN_SUCCESS = int(os.getenv("RU_PROBE_MIN_SUCCESS", "2"))
+RU_PROBE_TIMEOUT = float(os.getenv("RU_PROBE_TIMEOUT", "30"))
+RU_PROBE_CACHE_TTL = int(os.getenv("RU_PROBE_CACHE_TTL", "21600"))
+RU_PROBE_WORKERS = int(os.getenv("RU_PROBE_WORKERS", "4"))
 STATUS_FILE = os.getenv("VLESS_STATUS_FILE", "generation_status.json")
 ROUTING_STATUS_FILE = os.getenv("ROUTING_STATUS_FILE", "routing_data_status.json")
 STALE_WARNING_HOURS = float(os.getenv("STALE_WARNING_HOURS", "6"))
@@ -127,6 +139,22 @@ def fetch_json(url, timeout=30):
     return json.loads(fetch_text(url, timeout))
 
 
+def request_json(url, payload=None, timeout=30):
+    data = json.dumps(payload).encode() if payload is not None else None
+    request = urllib.request.Request(
+        url,
+        data=data,
+        headers={
+            "User-Agent": "happ-subscription-builder/12.0",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        },
+        method="POST" if data is not None else "GET",
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return json.load(response)
+
+
 def routing_profile():
     with open(ROUTING_PROFILE_FILE, "r", encoding="utf-8") as source:
         profile = json.load(source)
@@ -145,12 +173,14 @@ def routing_profile():
             "geosite:telegram", "geosite:youtube", "geosite:google",
             "geosite:ru-blocked", "geosite:ru-geoblock",
         },
-        "ProxyIp": {"geoip:ru-blocked", "geoip:ru-geoblock"},
+        "ProxyIp": {"149.154.160.0/20"},
     }
     if profile.get("Name") != "SIMUTIN":
         raise SystemExit("Routing profile must keep the stable name 'SIMUTIN'")
-    if profile.get("GlobalProxy") != "true" or profile.get("DomainStrategy") != "IPIfNonMatch":
-        raise SystemExit("Routing profile must proxy unmatched traffic and resolve IP rules")
+    if profile.get("GlobalProxy") != "false" or profile.get("DomainStrategy") != "IPIfNonMatch":
+        raise SystemExit("Routing profile must send unmatched traffic directly and resolve IP rules")
+    if profile.get("RouteOrder") != "block-direct-proxy":
+        raise SystemExit("Routing profile must prioritize direct Russian traffic")
     for field, expected in required.items():
         if not expected.issubset(set(profile.get(field) or [])):
             raise SystemExit(f"Routing profile is missing required {field} rules")
@@ -322,6 +352,96 @@ def history_stats(item, history):
     }
 
 
+def strict_pass_count(item, history, window=STABILITY_WINDOW):
+    samples = (history.get("servers", {}).get(history_key(item)) or {}).get("samples") or []
+    strict = [
+        sample for sample in samples
+        if "quality_ok" in sample or "telegram_dc" in sample
+    ][-window:]
+    return sum(
+        bool(sample.get("quality_ok")) or (
+            sample.get("success")
+            and sample.get("udp")
+            and sample.get("telegram_dc")
+            and all((sample.get("services") or {}).get(name) for name, _, _ in SERVICE_TESTS)
+            and float(sample.get("throughput_mbps") or 0) >= MIN_THROUGHPUT_MBPS
+        )
+        for sample in strict
+    )
+
+
+def cached_ru_probe(item, history, now=None):
+    now = int(time.time()) if now is None else int(now)
+    endpoint = f"{item.get('resolved_ip') or item['address']}:{item['port']}"
+    newest = None
+    for record in history.get("servers", {}).values():
+        probe = record.get("ru_probe") or {}
+        if record.get("endpoint") != endpoint or not probe.get("checked_at"):
+            continue
+        if newest is None or int(probe["checked_at"]) > int(newest["checked_at"]):
+            newest = probe
+    if newest and now - int(newest["checked_at"]) <= RU_PROBE_CACHE_TTL:
+        return dict(newest, cached=True)
+    return None
+
+
+def russian_network_probe(item, history):
+    cached = cached_ru_probe(item, history)
+    if cached is not None:
+        return cached
+    previous = None
+    endpoint = f"{item.get('resolved_ip') or item['address']}:{item['port']}"
+    for record in history.get("servers", {}).values():
+        probe = record.get("ru_probe") or {}
+        if record.get("endpoint") == endpoint and probe.get("checked_at"):
+            if previous is None or int(probe["checked_at"]) > int(previous["checked_at"]):
+                previous = probe
+    target = item.get("resolved_ip") or item["address"]
+    locations = [{"country": "RU", "asn": asn} for asn in RU_PROBE_ASNS]
+    payload = {
+        "type": "traceroute",
+        "target": target,
+        "locations": locations,
+        "limit": max(1, len(locations) * RU_PROBE_PER_ASN),
+        "measurementOptions": {"protocol": "TCP", "port": item["port"]},
+    }
+    try:
+        created = request_json(RU_PROBE_API, payload, timeout=10)
+        measurement_id = created["id"]
+        deadline = time.monotonic() + RU_PROBE_TIMEOUT
+        result = None
+        while time.monotonic() < deadline:
+            result = request_json(f"{RU_PROBE_API}/{measurement_id}", timeout=10)
+            if result.get("status") == "finished":
+                break
+            time.sleep(1)
+        if not result or result.get("status") != "finished":
+            raise TimeoutError("Russian reachability measurement did not finish")
+        successes = 0
+        probes = []
+        for entry in result.get("results") or []:
+            probe = entry.get("probe") or {}
+            hops = (entry.get("result") or {}).get("hops") or []
+            reached = any(hop.get("resolvedAddress") == target for hop in hops)
+            successes += int(reached)
+            probes.append({
+                "asn": probe.get("asn"), "city": probe.get("city"),
+                "network": probe.get("network"), "reached": reached,
+            })
+        return {
+            "checked_at": int(time.time()), "ok": successes >= RU_PROBE_MIN_SUCCESS,
+            "success_count": successes, "probe_count": len(probes),
+            "measurement_id": measurement_id, "probes": probes, "cached": False,
+        }
+    except (KeyError, OSError, TimeoutError, ValueError) as exc:
+        if previous and previous.get("ok"):
+            return dict(previous, cached=True, stale=True, error=str(exc))
+        return {
+            "checked_at": int(time.time()), "ok": False, "success_count": 0,
+            "probe_count": 0, "error": str(exc), "cached": False,
+        }
+
+
 def update_history(history, items_by_key, results):
     now = datetime.now(timezone.utc).isoformat()
     servers = history.setdefault("servers", {})
@@ -376,12 +496,15 @@ def canonical_item(address, port, uid, params):
     if not address or not port or not uid:
         return None
     network = (params.get("type") or params.get("network") or "tcp").lower()
-    if params.get("security") != "reality" or not params.get("pbk"):
+    if params.get("security") != "reality" or not params.get("pbk") or not params.get("sni"):
         return None
     if network not in {"tcp", "raw"}:
         return None
-    normalized = {"encryption": params.get("encryption") or "none", "type": network, "security": "reality"}
-    for key in ("flow", "sni", "fp", "pbk", "sid", "spx"):
+    normalized = {
+        "encryption": params.get("encryption") or "none", "type": network,
+        "security": "reality", "fp": params.get("fp") or "chrome",
+    }
+    for key in ("flow", "sni", "pbk", "sid", "spx"):
         value = params.get(key)
         if value not in (None, ""):
             normalized[key] = str(value)
@@ -553,7 +676,10 @@ def xray_outbound(item):
         user["flow"] = item["flow"]
     return {
         "protocol": "vless",
-        "settings": {"vnext": [{"address": item["address"], "port": item["port"], "users": [user]}]},
+        "settings": {"vnext": [{
+            "address": item.get("resolved_ip") or item["address"],
+            "port": item["port"], "users": [user],
+        }]},
         "streamSettings": {
             "network": "raw" if item["network"] == "raw" else "tcp", "security": "reality",
             "realitySettings": {
@@ -866,7 +992,10 @@ def take_unique(rows, limit):
     return selected
 
 
-def write_generation_status(success, selected_count, candidates, reality_ok, eligible, message=""):
+def write_generation_status(
+    success, selected_count, candidates, reality_ok, eligible, message="",
+    stable=None, russia_reachable=None,
+):
     now = datetime.now(timezone.utc)
     previous = load_json_file(STATUS_FILE, {})
     last_success = now.isoformat() if success else previous.get("last_success_at")
@@ -886,6 +1015,8 @@ def write_generation_status(success, selected_count, candidates, reality_ok, eli
         "candidate_count": candidates,
         "reality_passed_count": reality_ok,
         "quality_passed_count": eligible,
+        "stability_passed_count": stable,
+        "russia_reachable_count": russia_reachable,
         "minimum_required": MIN_SERVERS,
         "message": message,
     }
@@ -970,27 +1101,59 @@ def main():
             advanced[key] = result
             current_results[key].update(result)
 
-    update_history(history, items_by_key, current_results)
     eligible = []
     for row in finalists:
         result = advanced.get(history_key(row[1])) or {}
         services = result.get("services") or {}
-        if (
+        result["quality_ok"] = bool(
             result.get("udp")
             and result.get("telegram_dc")
             and all(services.get(name) for name, _, _ in SERVICE_TESTS)
             and float(result.get("throughput_mbps") or 0) >= MIN_THROUGHPUT_MBPS
-        ):
+        )
+        if result["quality_ok"]:
             eligible.append(row)
+    update_history(history, items_by_key, current_results)
     eligible.sort(key=lambda row: quality_score(row, history, advanced[history_key(row[1])]["throughput_mbps"]))
-    selected = eligible[:LIMIT]
+    stable = [row for row in eligible if strict_pass_count(row[1], history) >= STABILITY_MIN_STRICT_PASSES]
+    russian_reachable = stable
+    if RU_PROBE_ENABLED and stable:
+        probe_results = {}
+        with ThreadPoolExecutor(max_workers=RU_PROBE_WORKERS) as pool:
+            futures = {pool.submit(russian_network_probe, row[1], history): row for row in stable}
+            for future in as_completed(futures):
+                row = futures[future]
+                try:
+                    probe_results[history_key(row[1])] = future.result()
+                except Exception as exc:
+                    probe_results[history_key(row[1])] = {
+                        "checked_at": int(time.time()), "ok": False,
+                        "success_count": 0, "probe_count": 0, "error": str(exc),
+                    }
+        for row in stable:
+            key = history_key(row[1])
+            history["servers"][key]["ru_probe"] = probe_results[key]
+            probe = probe_results[key]
+            print(
+                f"RU probe {history['servers'][key]['endpoint']}: "
+                f"{probe.get('success_count', 0)}/{probe.get('probe_count', 0)}"
+                f"{' cached' if probe.get('cached') else ''}"
+            )
+        save_json_file(HISTORY_FILE, history)
+        russian_reachable = [
+            row for row in stable if probe_results[history_key(row[1])].get("ok")
+        ]
+    selected = russian_reachable[:LIMIT]
     if len(selected) < MIN_SERVERS:
         message = (
-            f"Only {len(selected)} diverse endpoints passed latency, throughput and UDP checks; "
+            f"Only {len(selected)} endpoints passed quality, stability and Russian-network checks; "
             f"keeping the current subscription below the safe minimum of {MIN_SERVERS}"
         )
         print(message)
-        write_generation_status(False, len(selected), len(candidates), len(reality_ok), len(eligible), message)
+        write_generation_status(
+            False, len(selected), len(candidates), len(reality_ok), len(eligible), message,
+            stable=len(stable), russia_reachable=len(russian_reachable),
+        )
         return
 
     lines = [tested_routing_link(), "#routing-enable: 1", "#profile-update-interval: 1",
@@ -1012,10 +1175,14 @@ def main():
         output.write(plain)
     with open("vless_base64.txt", "w", encoding="utf-8") as output:
         output.write(base64.b64encode(plain.encode()).decode() + "\n")
-    write_generation_status(True, len(selected), len(candidates), len(reality_ok), len(eligible))
+    write_generation_status(
+        True, len(selected), len(candidates), len(reality_ok), len(eligible),
+        stable=len(stable), russia_reachable=len(russian_reachable),
+    )
     print(
         f"Selected {len(selected)} diverse Reality servers from {len(candidates)} candidates; "
-        f"{len(reality_ok)} passed latency and {len(eligible)} passed all quality checks"
+        f"{len(reality_ok)} passed latency, {len(eligible)} passed quality, "
+        f"{len(stable)} passed stability and {len(russian_reachable)} were reachable from Russia"
     )
 
 
