@@ -18,6 +18,7 @@ jobs:
     runs-on: ${{ vars.VPN_RUNNER || 'ubuntu-latest' }}
     env:
       XRAY_VERSION: v26.7.28
+      HYSTERIA_VERSION: v2.12.1
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -49,7 +50,7 @@ jobs:
       - name: Test generator
         if: steps.freshness.outputs.run == 'true'
         run: |
-          python3 -m py_compile update_vless.py validate_subscription.py test_update_vless.py
+          python3 -m py_compile update_vless.py update_hy2.py validate_subscription.py test_update_vless.py
           python3 -m unittest -v
 
       - name: Restore geolocation cache
@@ -88,6 +89,33 @@ jobs:
         run: |
           echo "XRAY_BIN=$RUNNER_TEMP/xray/xray" >> "$GITHUB_ENV"
 
+      - name: Cache Hysteria2 client
+        if: steps.freshness.outputs.run == 'true'
+        id: cache-hysteria
+        uses: actions/cache@v5
+        with:
+          path: ${{ runner.temp }}/hysteria/hysteria
+          key: hysteria-${{ runner.os }}-${{ env.HYSTERIA_VERSION }}
+
+      - name: Install Hysteria2 client
+        if: steps.freshness.outputs.run == 'true' && steps.cache-hysteria.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/hysteria"
+          curl --fail --location --silent --show-error \
+            "https://download.hysteria.network/app/$HYSTERIA_VERSION/hashes.txt" \
+            --output "$RUNNER_TEMP/hysteria/hashes.txt"
+          curl --fail --location --silent --show-error \
+            "https://download.hysteria.network/app/$HYSTERIA_VERSION/hysteria-linux-amd64" \
+            --output "$RUNNER_TEMP/hysteria/hysteria"
+          expected="$(awk '$2 == "build/hysteria-linux-amd64" {print $1}' "$RUNNER_TEMP/hysteria/hashes.txt")"
+          test -n "$expected"
+          echo "$expected  $RUNNER_TEMP/hysteria/hysteria" | sha256sum --check
+          chmod +x "$RUNNER_TEMP/hysteria/hysteria"
+
+      - name: Configure Hysteria2 path
+        if: steps.freshness.outputs.run == 'true'
+        run: echo "HYSTERIA_BIN=$RUNNER_TEMP/hysteria/hysteria" >> "$GITHUB_ENV"
+
       - name: Generate subscription
         if: steps.freshness.outputs.run == 'true'
         id: generate
@@ -106,6 +134,14 @@ jobs:
           FINALIST_LIMIT: "50"
           SOURCE_ROTATION_SECONDS: "3600"
         run: python3 update_vless.py
+
+      - name: Add mobile QUIC fallbacks
+        if: steps.freshness.outputs.run == 'true'
+        env:
+          HY2_LIMIT: "8"
+          HY2_TEST_LIMIT: "80"
+          HY2_WORKERS: "5"
+        run: python3 update_hy2.py
 
       - name: Validate generated Happ subscription
         if: steps.freshness.outputs.run == 'true'
@@ -140,6 +176,7 @@ jobs:
               "",
               f"- Status: **{status.get('status', 'unknown')}**",
               f"- Selected: {status.get('selected_count', 'n/a')}",
+              f"- HY2/QUIC selected: {status.get('hy2_selected_count', 0)}",
               f"- Passed stability: {status.get('stability_passed_count', 'n/a')}",
               f"- Reachable from Russia: {status.get('russia_reachable_count', 'n/a')}",
               f"- Last success: {status.get('last_success_at', 'unknown')}",
