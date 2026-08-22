@@ -93,6 +93,12 @@ jobs:
         id: generate
         env:
           VLESS_LIMIT: "20"
+          VLESS_MIN_SERVERS: "3"
+          STABILITY_MIN_STRICT_PASSES: "2"
+          RU_PROBE_ASNS: "8359,12389"
+          RU_PROBE_MIN_SUCCESS: "2"
+          RU_PROBE_CACHE_TTL: "21600"
+          RU_PROBE_WORKERS: "4"
           REALITY_TEST_LIMIT: "100"
           REALITY_TEST_WORKERS: "8"
           GEO_WORKERS: "8"
@@ -134,6 +140,8 @@ jobs:
               "",
               f"- Status: **{status.get('status', 'unknown')}**",
               f"- Selected: {status.get('selected_count', 'n/a')}",
+              f"- Passed stability: {status.get('stability_passed_count', 'n/a')}",
+              f"- Reachable from Russia: {status.get('russia_reachable_count', 'n/a')}",
               f"- Last success: {status.get('last_success_at', 'unknown')}",
               f"- Stale hours: {status.get('stale_hours', 'unknown')}",
               f"- Message: {status.get('message') or 'OK'}",
