@@ -1116,11 +1116,21 @@ def main():
     update_history(history, items_by_key, current_results)
     eligible.sort(key=lambda row: quality_score(row, history, advanced[history_key(row[1])]["throughput_mbps"]))
     stable = [row for row in eligible if strict_pass_count(row[1], history) >= STABILITY_MIN_STRICT_PASSES]
-    russian_reachable = stable
-    if RU_PROBE_ENABLED and stable:
+    # Public free credentials often disappear or become filtered shortly after
+    # publication.  Requiring two historic passes made the feed lag behind and
+    # excluded the freshest nodes even after a complete successful probe now.
+    # Publish every currently eligible node and retain stability as a ranking
+    # signal and health metric.
+    publishable = eligible
+    # Russian probes only prove that a TCP port is reachable from a small set
+    # of fixed networks.  They cannot complete the subscriber's VLESS/Reality
+    # handshake and therefore must not discard otherwise healthy nodes.  Use
+    # them as a preference, while Happ performs the decisive check on-device.
+    russian_reachable = publishable
+    if RU_PROBE_ENABLED and publishable:
         probe_results = {}
         with ThreadPoolExecutor(max_workers=RU_PROBE_WORKERS) as pool:
-            futures = {pool.submit(russian_network_probe, row[1], history): row for row in stable}
+            futures = {pool.submit(russian_network_probe, row[1], history): row for row in publishable}
             for future in as_completed(futures):
                 row = futures[future]
                 try:
@@ -1130,7 +1140,7 @@ def main():
                         "checked_at": int(time.time()), "ok": False,
                         "success_count": 0, "probe_count": 0, "error": str(exc),
                     }
-        for row in stable:
+        for row in publishable:
             key = history_key(row[1])
             history["servers"][key]["ru_probe"] = probe_results[key]
             probe = probe_results[key]
@@ -1141,12 +1151,20 @@ def main():
             )
         save_json_file(HISTORY_FILE, history)
         russian_reachable = [
-            row for row in stable if probe_results[history_key(row[1])].get("ok")
+            row for row in publishable if probe_results[history_key(row[1])].get("ok")
         ]
-    selected = russian_reachable[:LIMIT]
+        publishable.sort(key=lambda row: (
+            not probe_results[history_key(row[1])].get("ok"),
+            strict_pass_count(row[1], history) < STABILITY_MIN_STRICT_PASSES,
+            quality_score(
+                row, history,
+                advanced[history_key(row[1])]["throughput_mbps"],
+            ),
+        ))
+    selected = publishable[:LIMIT]
     if len(selected) < MIN_SERVERS:
         message = (
-            f"Only {len(selected)} endpoints passed quality, stability and Russian-network checks; "
+            f"Only {len(selected)} endpoints passed full quality and stability checks; "
             f"keeping the current subscription below the safe minimum of {MIN_SERVERS}"
         )
         print(message)
@@ -1157,8 +1175,8 @@ def main():
         return
 
     lines = [tested_routing_link(), "#routing-enable: 1", "#profile-update-interval: 1",
-             "#subscription-auto-update-open-enable: 1", "#subscription-ping-onopen-enabled: 0",
-             "#subscriptions-sort-type: without", "#profile-title: Fast VPN"]
+             "#subscription-auto-update-open-enable: 1", "#subscription-ping-onopen-enabled: 1",
+             "#subscriptions-sort-type: ping", "#profile-title: Fast VPN"]
     for latency, item, geo in selected:
         location = geo["country"] + (f" · {geo['city']}" if geo["city"] else "")
         distance = round(distance_from_moscow_km(geo))
@@ -1182,7 +1200,8 @@ def main():
     print(
         f"Selected {len(selected)} diverse Reality servers from {len(candidates)} candidates; "
         f"{len(reality_ok)} passed latency, {len(eligible)} passed quality, "
-        f"{len(stable)} passed stability and {len(russian_reachable)} were reachable from Russia"
+        f"{len(stable)} passed stability; {len(russian_reachable)} were preferred by Russian probes, "
+        "and Happ will verify and sort them on each device"
     )
 
 
