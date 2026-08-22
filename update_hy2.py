@@ -205,11 +205,25 @@ def label(item, geo, result):
     return f"{item['uri']}#{quote(title, safe='')}"
 
 
+def hy2_insert_index(lines):
+    """Keep fully verified CDN/TLS VLESS nodes ahead of UDP fallbacks."""
+    index = next(
+        (position for position, line in enumerate(lines) if line.lower().startswith("vless://")),
+        len(lines),
+    )
+    while index < len(lines) and lines[index].lower().startswith("vless://"):
+        fragment = unquote(lines[index].partition("#")[2])
+        if "CDN-" not in fragment:
+            break
+        index += 1
+    return index
+
+
 def update_files(selected):
     path = Path("vless.txt")
     lines = path.read_text(encoding="utf-8").splitlines()
     lines = [line for line in lines if not line.lower().startswith(("hysteria2://", "hy2://"))]
-    insert_at = next((index for index, line in enumerate(lines) if line.lower().startswith("vless://")), len(lines))
+    insert_at = hy2_insert_index(lines)
     hy2_lines = [label(item, geo, result) for item, geo, result in selected]
     lines[insert_at:insert_at] = hy2_lines
     plain = "\n".join(lines) + "\n"
