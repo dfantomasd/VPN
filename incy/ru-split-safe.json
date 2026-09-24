@@ -1,0 +1,26 @@
+{
+  "Name": "RU Split Safe",
+  "GlobalProxy": "true",
+  "Geoipurl": "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat",
+  "Geositeurl": "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat",
+  "DirectSites": [
+    "domain:ru",
+    "domain:xn--p1ai",
+    "domain:su"
+  ],
+  "DirectIp": [
+    "geoip:ru",
+    "10.0.0.0/8",
+    "100.64.0.0/10",
+    "127.0.0.0/8",
+    "172.16.0.0/12",
+    "192.168.0.0/16",
+    "169.254.0.0/16"
+  ],
+  "ProxySites": [],
+  "ProxyIp": [],
+  "BlockSites": [],
+  "BlockIp": [],
+  "DomainStrategy": "IPIfNonMatch",
+  "FakeDNS": "false"
+}
