@@ -712,7 +712,7 @@
     },
     "040154a9280714526ea6af94": {
       "endpoint": "144.31.4.193:444",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "ru_probe": {
         "cached": true,
         "checked_at": 1790973859,
@@ -765,6 +765,10 @@
         {
           "latency_ms": 869.639,
           "success": true
+        },
+        {
+          "latency_ms": 4098.763,
+          "success": false
         }
       ]
     },
@@ -780,7 +784,7 @@
     },
     "0513af2e4e50ddd3ccaf42a7": {
       "endpoint": "188.114.98.0:443",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -1095,7 +1099,7 @@
     },
     "080f9614c10f0d0b4e1e1336": {
       "endpoint": "188.114.97.6:2053",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -1299,27 +1303,6 @@
         {
           "latency_ms": 56.935,
           "success": true
-        }
-      ]
-    },
-    "096a2e5328bb49e0cc164f69": {
-      "endpoint": "188.114.97.6:443",
-      "last_seen": "2026-09-28T06:51:39.798323+00:00",
-      "samples": [
-        {
-          "latency_ms": 154.20700000000002,
-          "success": true
-        },
-        {
-          "latency_ms": 230.254,
-          "services": {
-            "gemini": true,
-            "telegram": true
-          },
-          "success": true,
-          "telegram_dc": true,
-          "throughput_mbps": 0.0,
-          "udp": true
         }
       ]
     },
@@ -2149,7 +2132,7 @@
     },
     "10783b1a395846549ab729fc": {
       "endpoint": "104.21.55.47:2087",
-      "last_seen": "2026-10-02T00:18:37.911760+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -3498,7 +3481,7 @@
     },
     "1bb8b5b2adb923f9d50678cc": {
       "endpoint": "188.114.97.6:443",
-      "last_seen": "2026-10-03T06:30:49.630796+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "ru_probe": {
         "cached": false,
         "checked_at": 1790123466,
@@ -3522,10 +3505,6 @@
         "success_count": 2
       },
       "samples": [
-        {
-          "latency_ms": 1345.788,
-          "success": true
-        },
         {
           "latency_ms": 1849.0720000000001,
           "success": true
@@ -3583,6 +3562,17 @@
         {
           "latency_ms": 1465.614,
           "success": true
+        },
+        {
+          "latency_ms": 1608.233,
+          "services": {
+            "gemini": false,
+            "telegram": true
+          },
+          "success": true,
+          "telegram_dc": true,
+          "throughput_mbps": 1.95164,
+          "udp": true
         }
       ]
     },
@@ -3898,7 +3888,7 @@
     },
     "1caa7954338592fda2b8f763": {
       "endpoint": "172.64.155.209:2053",
-      "last_seen": "2026-10-03T06:30:49.630796+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -4000,11 +3990,15 @@
     },
     "1e2d6354d0414831e42aad92": {
       "endpoint": "103.31.4.21:443",
-      "last_seen": "2026-10-03T06:30:49.630796+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": 154.183,
           "success": true
+        },
+        {
+          "latency_ms": null,
+          "success": false
         },
         {
           "latency_ms": null,
@@ -4147,7 +4141,7 @@
     },
     "1f1abf9cf2074786588a3750": {
       "endpoint": "104.16.10.135:443",
-      "last_seen": "2026-10-02T08:29:53.827512+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": 1190.868,
@@ -4202,6 +4196,17 @@
           "services": {
             "gemini": false,
             "telegram": false
+          },
+          "success": true,
+          "telegram_dc": true,
+          "throughput_mbps": 0.0,
+          "udp": true
+        },
+        {
+          "latency_ms": 1100.492,
+          "services": {
+            "gemini": false,
+            "telegram": true
           },
           "success": true,
           "telegram_dc": true,
@@ -4990,7 +4995,7 @@
     },
     "253b695b34133b2063afba35": {
       "endpoint": "103.31.4.10:443",
-      "last_seen": "2026-10-03T01:30:35.959443+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": 643.9639999999999,
@@ -5002,6 +5007,10 @@
           "telegram_dc": true,
           "throughput_mbps": 0.0,
           "udp": true
+        },
+        {
+          "latency_ms": null,
+          "success": false
         },
         {
           "latency_ms": null,
@@ -5210,7 +5219,7 @@
     },
     "25e80c5edc54efb353f48734": {
       "endpoint": "103.177.249.40:2083",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": 690.51,
@@ -5244,6 +5253,10 @@
           "telegram_dc": true,
           "throughput_mbps": 0.0,
           "udp": false
+        },
+        {
+          "latency_ms": null,
+          "success": false
         },
         {
           "latency_ms": null,
@@ -5961,7 +5974,7 @@
     },
     "2b9160919d2351196c7dda11": {
       "endpoint": "104.18.131.38:443",
-      "last_seen": "2026-10-03T00:29:18.039218+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -6008,6 +6021,10 @@
           "telegram_dc": true,
           "throughput_mbps": 0.0,
           "udp": false
+        },
+        {
+          "latency_ms": null,
+          "success": false
         },
         {
           "latency_ms": null,
@@ -6393,7 +6410,7 @@
     },
     "2c5892fd9c5cb5550590e2c0": {
       "endpoint": "89.35.14.32:443",
-      "last_seen": "2026-10-03T01:30:35.959443+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "ru_probe": {
         "cached": true,
         "checked_at": 1789082894,
@@ -6417,17 +6434,6 @@
         "success_count": 0
       },
       "samples": [
-        {
-          "latency_ms": 896.058,
-          "services": {
-            "gemini": false,
-            "telegram": true
-          },
-          "success": true,
-          "telegram_dc": true,
-          "throughput_mbps": 4.259856,
-          "udp": true
-        },
         {
           "latency_ms": 782.6990000000001,
           "success": true
@@ -6512,6 +6518,10 @@
         },
         {
           "latency_ms": 816.314,
+          "success": true
+        },
+        {
+          "latency_ms": 836.228,
           "success": true
         }
       ]
@@ -6989,9 +6999,19 @@
         }
       ]
     },
+    "2ded37ded1c5c87189cc8d49": {
+      "endpoint": "103.249.134.29:443",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
+      "samples": [
+        {
+          "latency_ms": null,
+          "success": false
+        }
+      ]
+    },
     "2e5a87564da2684b44ab0790": {
       "endpoint": "188.114.98.0:443",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "ru_probe": {
         "cached": true,
         "checked_at": 1789686595,
@@ -7148,7 +7168,7 @@
     },
     "2f469d2f55e6ebd998e0eecf": {
       "endpoint": "37.46.196.85:8443",
-      "last_seen": "2026-10-03T06:30:49.630796+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "ru_probe": {
         "cached": true,
         "checked_at": 1790462920,
@@ -7455,19 +7475,8 @@
     },
     "31af85a6d64d3d7ec378ddbc": {
       "endpoint": "150.40.126.18:443",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
-        {
-          "latency_ms": 959.6320000000001,
-          "services": {
-            "gemini": false,
-            "telegram": true
-          },
-          "success": true,
-          "telegram_dc": true,
-          "throughput_mbps": 3.469712,
-          "udp": true
-        },
         {
           "latency_ms": 678.99,
           "success": true
@@ -7539,6 +7548,17 @@
         {
           "latency_ms": 644.479,
           "success": true
+        },
+        {
+          "latency_ms": 651.086,
+          "services": {
+            "gemini": false,
+            "telegram": false
+          },
+          "success": true,
+          "telegram_dc": true,
+          "throughput_mbps": 5.089712,
+          "udp": true
         }
       ]
     },
@@ -7972,7 +7992,7 @@
     },
     "33add4cdfd80b0e303e83e5f": {
       "endpoint": "188.114.97.6:443",
-      "last_seen": "2026-10-03T06:30:49.630796+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -8203,60 +8223,6 @@
         {
           "latency_ms": 775.6429999999999,
           "success": true
-        }
-      ]
-    },
-    "3467ace90da30e92d49347f5": {
-      "endpoint": "31.77.7.139:2055",
-      "last_seen": "2026-09-28T06:51:39.798323+00:00",
-      "samples": [
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
         }
       ]
     },
@@ -8511,12 +8477,8 @@
     },
     "35eebc77f19694e5d9a541d3": {
       "endpoint": "150.40.126.22:443",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
-        {
-          "latency_ms": 646.529,
-          "success": true
-        },
         {
           "latency_ms": 715.275,
           "success": true
@@ -8559,6 +8521,10 @@
         },
         {
           "latency_ms": 719.1619999999999,
+          "success": true
+        },
+        {
+          "latency_ms": 684.507,
           "success": true
         }
       ]
@@ -9580,6 +9546,16 @@
         }
       ]
     },
+    "3bfb59cf79850cf1acb399f5": {
+      "endpoint": "144.31.240.253:443",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
+      "samples": [
+        {
+          "latency_ms": 1064.181,
+          "success": true
+        }
+      ]
+    },
     "3c0fd10db76f643f5d70df76": {
       "endpoint": "144.31.1.13:443",
       "last_seen": "2026-10-02T08:29:53.827512+00:00",
@@ -9675,11 +9651,11 @@
     },
     "3c594cc699f8abd69efc7b90": {
       "endpoint": "194.26.141.148:8443",
-      "last_seen": "2026-10-02T00:18:37.911760+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "ru_probe": {
-        "cached": true,
-        "checked_at": 1790886984,
-        "measurement_id": "2wkWZZlRAB30Ztadh00021ErE",
+        "cached": false,
+        "checked_at": 1791046196,
+        "measurement_id": "2govmHYm9LDCrQwg500021FY1",
         "ok": true,
         "probe_count": 2,
         "probes": [
@@ -9691,7 +9667,7 @@
           },
           {
             "asn": 12389,
-            "city": "Kostroma",
+            "city": "Nizhniy Novgorod",
             "network": "Rostelecom",
             "reached": true
           }
@@ -9719,6 +9695,17 @@
           "success": true,
           "telegram_dc": true,
           "throughput_mbps": 5.267728,
+          "udp": true
+        },
+        {
+          "latency_ms": 680.782,
+          "services": {
+            "gemini": true,
+            "telegram": true
+          },
+          "success": true,
+          "telegram_dc": true,
+          "throughput_mbps": 4.915056,
           "udp": true
         }
       ]
@@ -9854,8 +9841,12 @@
     },
     "3cfb7a74cbdf1b64a955c277": {
       "endpoint": "104.21.53.134:443",
-      "last_seen": "2026-10-01T02:09:14.576862+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
+        {
+          "latency_ms": null,
+          "success": false
+        },
         {
           "latency_ms": null,
           "success": false
@@ -10268,7 +10259,7 @@
     },
     "3da13f38249a756f79ca5415": {
       "endpoint": "103.31.4.127:443",
-      "last_seen": "2026-10-03T06:30:49.630796+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": 169.049,
@@ -10288,6 +10279,10 @@
         {
           "latency_ms": 151.455,
           "success": true
+        },
+        {
+          "latency_ms": null,
+          "success": false
         },
         {
           "latency_ms": null,
@@ -10729,19 +10724,8 @@
     },
     "4166a7d0e26824671511c3ef": {
       "endpoint": "172.64.52.230:2087",
-      "last_seen": "2026-10-02T20:44:09.176291+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
-        {
-          "latency_ms": 159.878,
-          "services": {
-            "gemini": true,
-            "telegram": true
-          },
-          "success": true,
-          "telegram_dc": true,
-          "throughput_mbps": 0.0,
-          "udp": false
-        },
         {
           "latency_ms": 190.725,
           "services": {
@@ -10804,6 +10788,10 @@
           "telegram_dc": true,
           "throughput_mbps": 0.0,
           "udp": false
+        },
+        {
+          "latency_ms": null,
+          "success": false
         },
         {
           "latency_ms": null,
@@ -10938,11 +10926,15 @@
     },
     "41e9aade6701ba47de794fb5": {
       "endpoint": "103.31.4.97:443",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": 149.758,
           "success": true
+        },
+        {
+          "latency_ms": null,
+          "success": false
         },
         {
           "latency_ms": null,
@@ -10996,11 +10988,15 @@
     },
     "423bb762a0ba98883d45029e": {
       "endpoint": "188.114.97.1:443",
-      "last_seen": "2026-09-29T19:42:31.182256+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": 127.14900000000002,
           "success": true
+        },
+        {
+          "latency_ms": null,
+          "success": false
         },
         {
           "latency_ms": null,
@@ -11148,7 +11144,7 @@
     },
     "4417ac4e164071c66155afb3": {
       "endpoint": "150.40.126.22:443",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": 687.3789999999999,
@@ -11168,6 +11164,10 @@
         },
         {
           "latency_ms": 636.473,
+          "success": true
+        },
+        {
+          "latency_ms": 921.397,
           "success": true
         }
       ]
@@ -11508,19 +11508,8 @@
     },
     "483e816ddc46be4dcc5c86fe": {
       "endpoint": "188.114.97.6:443",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
-        {
-          "latency_ms": 116.09,
-          "services": {
-            "gemini": true,
-            "telegram": true
-          },
-          "success": true,
-          "telegram_dc": true,
-          "throughput_mbps": 0.0,
-          "udp": true
-        },
         {
           "latency_ms": 226.996,
           "success": true
@@ -11585,6 +11574,10 @@
         {
           "latency_ms": null,
           "success": false
+        },
+        {
+          "latency_ms": null,
+          "success": false
         }
       ]
     },
@@ -11602,9 +11595,19 @@
         }
       ]
     },
+    "48e897f7d2abfa00a76996c7": {
+      "endpoint": "104.21.90.36:443",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
+      "samples": [
+        {
+          "latency_ms": null,
+          "success": false
+        }
+      ]
+    },
     "48f3309d49038a99fb26875b": {
       "endpoint": "162.159.13.71:443",
-      "last_seen": "2026-10-01T15:44:34.579232+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -12016,7 +12019,7 @@
     },
     "4ba8a40d835a9609a7827e09": {
       "endpoint": "188.114.99.160:8443",
-      "last_seen": "2026-10-03T06:30:49.630796+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -12092,8 +12095,12 @@
     },
     "4c4e3843365112d9101ca74f": {
       "endpoint": "172.66.44.97:443",
-      "last_seen": "2026-10-02T13:15:40.824993+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
+        {
+          "latency_ms": null,
+          "success": false
+        },
         {
           "latency_ms": null,
           "success": false
@@ -12335,60 +12342,6 @@
         }
       ]
     },
-    "4e3df456f4074c696b478356": {
-      "endpoint": "89.35.14.30:443",
-      "last_seen": "2026-09-28T06:51:39.798323+00:00",
-      "samples": [
-        {
-          "latency_ms": 1134.913,
-          "success": true
-        },
-        {
-          "latency_ms": 813.471,
-          "success": true
-        },
-        {
-          "latency_ms": 1300.719,
-          "success": true
-        },
-        {
-          "latency_ms": 1564.725,
-          "success": true
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": 1070.0810000000001,
-          "success": true
-        },
-        {
-          "latency_ms": 1469.596,
-          "success": true
-        },
-        {
-          "latency_ms": 917.074,
-          "success": true
-        },
-        {
-          "latency_ms": 1088.177,
-          "success": true
-        },
-        {
-          "latency_ms": 1230.701,
-          "success": true
-        },
-        {
-          "latency_ms": 1428.951,
-          "success": true
-        }
-      ]
-    },
     "4e8401b0d77f8410f4d17662": {
       "endpoint": "91.239.23.241:443",
       "last_seen": "2026-10-01T00:53:45.641260+00:00",
@@ -12441,8 +12394,12 @@
     },
     "4f7272461aa3c792f9df7bfd": {
       "endpoint": "104.16.80.73:2083",
-      "last_seen": "2026-09-30T09:04:12.222116+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
+        {
+          "latency_ms": null,
+          "success": false
+        },
         {
           "latency_ms": null,
           "success": false
@@ -12710,7 +12667,7 @@
     },
     "506c085b99627952d4d6b16b": {
       "endpoint": "89.35.14.34:443",
-      "last_seen": "2026-10-02T22:38:05.600032+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "ru_probe": {
         "cached": false,
         "checked_at": 1788385759,
@@ -12734,10 +12691,6 @@
         "success_count": 2
       },
       "samples": [
-        {
-          "latency_ms": 1061.337,
-          "success": true
-        },
         {
           "latency_ms": 1907.395,
           "success": true
@@ -12780,6 +12733,10 @@
         },
         {
           "latency_ms": 1228.065,
+          "success": true
+        },
+        {
+          "latency_ms": 886.9820000000001,
           "success": true
         }
       ]
@@ -12976,7 +12933,29 @@
     },
     "517b1764096efa7b6abe7a29": {
       "endpoint": "144.31.4.193:444",
-      "last_seen": "2026-10-03T06:30:49.630796+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
+      "ru_probe": {
+        "cached": true,
+        "checked_at": 1791030735,
+        "measurement_id": "2LvOFDgpblg7BIZ9200021FTs",
+        "ok": true,
+        "probe_count": 2,
+        "probes": [
+          {
+            "asn": 8359,
+            "city": "Novosibirsk",
+            "network": "MTS",
+            "reached": true
+          },
+          {
+            "asn": 12389,
+            "city": "Nizhniy Novgorod",
+            "network": "Rostelecom",
+            "reached": true
+          }
+        ],
+        "success_count": 2
+      },
       "samples": [
         {
           "latency_ms": 805.8,
@@ -12985,6 +12964,17 @@
         {
           "latency_ms": 660.709,
           "success": true
+        },
+        {
+          "latency_ms": 2813.752,
+          "services": {
+            "gemini": true,
+            "telegram": true
+          },
+          "success": true,
+          "telegram_dc": true,
+          "throughput_mbps": 5.250808,
+          "udp": true
         }
       ]
     },
@@ -13382,8 +13372,12 @@
     },
     "54dc952bb65c74df31f4eefc": {
       "endpoint": "104.27.66.214:8443",
-      "last_seen": "2026-10-02T06:18:52.852098+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
+        {
+          "latency_ms": null,
+          "success": false
+        },
         {
           "latency_ms": null,
           "success": false
@@ -13554,6 +13548,16 @@
         {
           "latency_ms": null,
           "success": false
+        }
+      ]
+    },
+    "55b060b27cc5c0f3a2af3f63": {
+      "endpoint": "91.107.191.188:8443",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
+      "samples": [
+        {
+          "latency_ms": 1077.223,
+          "success": true
         }
       ]
     },
@@ -13945,7 +13949,7 @@
     },
     "5865bed345d2c6391531f969": {
       "endpoint": "103.31.4.173:443",
-      "last_seen": "2026-10-03T06:30:49.630796+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -14087,10 +14091,24 @@
         }
       ]
     },
+    "597b69d0d7d33381533058a5": {
+      "endpoint": "104.21.70.21:443",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
+      "samples": [
+        {
+          "latency_ms": null,
+          "success": false
+        }
+      ]
+    },
     "59a585cc39e3e0a2268a3a6c": {
       "endpoint": "104.19.229.21:443",
-      "last_seen": "2026-10-03T06:30:49.630796+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
+        {
+          "latency_ms": null,
+          "success": false
+        },
         {
           "latency_ms": null,
           "success": false
@@ -14214,7 +14232,7 @@
     },
     "5a26ef9887ecf9b6234cad50": {
       "endpoint": "103.119.18.30:443",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -14360,7 +14378,7 @@
     },
     "5ac9230b974564c99996294e": {
       "endpoint": "188.114.97.6:443",
-      "last_seen": "2026-10-03T06:30:49.630796+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -14572,7 +14590,7 @@
     },
     "5ce3e6bdce3032e2f5933f38": {
       "endpoint": "159.195.253.15:8443",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -14743,7 +14761,7 @@
     },
     "5e6ef4081fe2d4987528c642": {
       "endpoint": "104.21.36.57:443",
-      "last_seen": "2026-10-02T01:42:15.308223+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -15440,7 +15458,7 @@
     },
     "64b730636c8008433e10f070": {
       "endpoint": "103.102.228.113:443",
-      "last_seen": "2026-10-02T15:47:57.968201+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -15460,6 +15478,10 @@
           "telegram_dc": true,
           "throughput_mbps": 0.0,
           "udp": true
+        },
+        {
+          "latency_ms": null,
+          "success": false
         },
         {
           "latency_ms": null,
@@ -15486,12 +15508,8 @@
     },
     "6592dfcf8badd0cb7ecbf27e": {
       "endpoint": "188.114.97.3:443",
-      "last_seen": "2026-10-02T20:44:09.176291+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
-        {
-          "latency_ms": null,
-          "success": false
-        },
         {
           "latency_ms": 109.008,
           "success": true
@@ -15534,6 +15552,10 @@
         {
           "latency_ms": 110.985,
           "success": true
+        },
+        {
+          "latency_ms": null,
+          "success": false
         },
         {
           "latency_ms": null,
@@ -15647,7 +15669,7 @@
     },
     "66a9de8a10308f4f0f91d415": {
       "endpoint": "172.66.44.97:443",
-      "last_seen": "2026-10-03T01:30:35.959443+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -16031,12 +16053,8 @@
     },
     "68f10518431e74ce7e06fe09": {
       "endpoint": "89.35.14.34:443",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
-        {
-          "latency_ms": 1275.779,
-          "success": true
-        },
         {
           "latency_ms": 2560.877,
           "success": true
@@ -16079,6 +16097,10 @@
         },
         {
           "latency_ms": 2422.136,
+          "success": true
+        },
+        {
+          "latency_ms": 1458.982,
           "success": true
         }
       ]
@@ -16124,12 +16146,8 @@
     },
     "6973304b375b3609c11043bf": {
       "endpoint": "150.40.126.21:443",
-      "last_seen": "2026-10-02T13:15:40.824993+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
-        {
-          "latency_ms": 807.841,
-          "success": true
-        },
         {
           "latency_ms": 736.497,
           "success": true
@@ -16187,6 +16205,10 @@
           "telegram_dc": true,
           "throughput_mbps": 3.134432,
           "udp": true
+        },
+        {
+          "latency_ms": 696.678,
+          "success": true
         }
       ]
     },
@@ -16360,10 +16382,14 @@
     },
     "6a53946533d887ebee8ed718": {
       "endpoint": "45.9.156.24:443",
-      "last_seen": "2026-10-03T01:30:35.959443+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": 629.4340000000001,
+          "success": true
+        },
+        {
+          "latency_ms": 664.1949999999999,
           "success": true
         }
       ]
@@ -16823,6 +16849,16 @@
         }
       ]
     },
+    "6e7cdfbfaa3ac6ee18749925": {
+      "endpoint": "104.21.31.137:443",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
+      "samples": [
+        {
+          "latency_ms": null,
+          "success": false
+        }
+      ]
+    },
     "6ea64765f0b26a8a5e25d96c": {
       "endpoint": "104.21.64.247:443",
       "last_seen": "2026-10-02T00:18:37.911760+00:00",
@@ -16981,20 +17017,6 @@
         }
       ]
     },
-    "70d0cf909867edac6b93d550": {
-      "endpoint": "194.180.191.249:443",
-      "last_seen": "2026-09-28T06:51:39.798323+00:00",
-      "samples": [
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        }
-      ]
-    },
     "714369f83de62a3ccf0ecb86": {
       "endpoint": "188.114.97.6:443",
       "last_seen": "2026-09-30T16:08:14.771657+00:00",
@@ -17061,7 +17083,7 @@
     },
     "715637655b68a450a0dc2d89": {
       "endpoint": "144.31.4.193:444",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "ru_probe": {
         "cached": true,
         "checked_at": 1790973859,
@@ -17165,6 +17187,10 @@
         {
           "latency_ms": 5603.172,
           "success": false
+        },
+        {
+          "latency_ms": 2507.211,
+          "success": true
         }
       ]
     },
@@ -17781,11 +17807,22 @@
     },
     "774eb9aa5fb8981e5a626342": {
       "endpoint": "104.18.153.10:443",
-      "last_seen": "2026-10-01T07:52:18.621048+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": 4517.599999999999,
           "success": false
+        },
+        {
+          "latency_ms": 1532.7569999999998,
+          "services": {
+            "gemini": false,
+            "telegram": false
+          },
+          "success": true,
+          "telegram_dc": true,
+          "throughput_mbps": 0.0,
+          "udp": true
         }
       ]
     },
@@ -17920,7 +17957,7 @@
     },
     "77f59a7f3b84eea3ff8e4162": {
       "endpoint": "45.9.156.27:443",
-      "last_seen": "2026-10-03T01:30:35.959443+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": 808.345,
@@ -17948,6 +17985,10 @@
         },
         {
           "latency_ms": 689.548,
+          "success": true
+        },
+        {
+          "latency_ms": 638.153,
           "success": true
         }
       ]
@@ -18146,28 +18187,6 @@
         }
       ]
     },
-    "78c57554eef687945c1749e0": {
-      "endpoint": "122.8.45.3:443",
-      "last_seen": "2026-09-28T06:51:39.798323+00:00",
-      "samples": [
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        }
-      ]
-    },
     "78f2944ddfa2bbe2ef07f2eb": {
       "endpoint": "188.114.97.6:443",
       "last_seen": "2026-10-01T20:36:18.776304+00:00",
@@ -18256,9 +18275,9 @@
     },
     "7959e5aff7450d82b6eeb11f": {
       "endpoint": "62.60.159.81:2053",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "ru_probe": {
-        "cached": false,
+        "cached": true,
         "checked_at": 1791030740,
         "measurement_id": "2ZV3ppjS9vVgYIbxq00021FTs",
         "ok": true,
@@ -18367,12 +18386,23 @@
           "telegram_dc": true,
           "throughput_mbps": 4.282328,
           "udp": true
+        },
+        {
+          "latency_ms": 737.649,
+          "services": {
+            "gemini": true,
+            "telegram": true
+          },
+          "success": true,
+          "telegram_dc": true,
+          "throughput_mbps": 3.990376,
+          "udp": true
         }
       ]
     },
     "7a5530c0dfa38f498c1cbd3a": {
       "endpoint": "103.31.4.140:8443",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -18418,16 +18448,6 @@
           "latency_ms": null,
           "success": false
         },
-        {
-          "latency_ms": null,
-          "success": false
-        }
-      ]
-    },
-    "7aafee71d3e6659486ad3d58": {
-      "endpoint": "104.21.88.201:443",
-      "last_seen": "2026-09-28T06:51:39.798323+00:00",
-      "samples": [
         {
           "latency_ms": null,
           "success": false
@@ -19300,19 +19320,8 @@
     },
     "815c1046f914198d5686fe40": {
       "endpoint": "103.71.23.247:443",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
-        {
-          "latency_ms": 2357.5179999999996,
-          "services": {
-            "gemini": true,
-            "telegram": true
-          },
-          "success": true,
-          "telegram_dc": true,
-          "throughput_mbps": 2.428112,
-          "udp": true
-        },
         {
           "latency_ms": 1831.037,
           "services": {
@@ -19384,24 +19393,17 @@
         {
           "latency_ms": null,
           "success": false
+        },
+        {
+          "latency_ms": null,
+          "success": false
         }
       ]
     },
     "82234298a2bdbd4507ddabfc": {
       "endpoint": "103.71.23.244:443",
-      "last_seen": "2026-10-03T01:30:35.959443+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
-        {
-          "latency_ms": 1038.691,
-          "services": {
-            "gemini": true,
-            "telegram": true
-          },
-          "success": true,
-          "telegram_dc": true,
-          "throughput_mbps": 0.0,
-          "udp": true
-        },
         {
           "latency_ms": 1085.093,
           "services": {
@@ -19473,6 +19475,10 @@
           "telegram_dc": true,
           "throughput_mbps": 0.0,
           "udp": true
+        },
+        {
+          "latency_ms": null,
+          "success": false
         }
       ]
     },
@@ -19870,6 +19876,16 @@
         }
       ]
     },
+    "841a949fa175c1043be603d0": {
+      "endpoint": "104.18.44.210:443",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
+      "samples": [
+        {
+          "latency_ms": null,
+          "success": false
+        }
+      ]
+    },
     "845680448fcc180a9c0daee3": {
       "endpoint": "132.243.231.120:443",
       "last_seen": "2026-09-29T23:15:52.910075+00:00",
@@ -20090,11 +20106,15 @@
     },
     "852852b707db191862fcab23": {
       "endpoint": "103.31.4.157:443",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": 156.00300000000001,
           "success": true
+        },
+        {
+          "latency_ms": null,
+          "success": false
         },
         {
           "latency_ms": null,
@@ -20116,7 +20136,7 @@
     },
     "85315f66fba126183625775c": {
       "endpoint": "132.243.223.227:2101",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -20461,7 +20481,7 @@
     },
     "8656de0e011301ae2ca48a7a": {
       "endpoint": "212.104.128.206:443",
-      "last_seen": "2026-10-03T06:30:49.630796+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -20911,7 +20931,7 @@
     },
     "890dcd9da95316c317c2c68d": {
       "endpoint": "188.114.97.6:443",
-      "last_seen": "2026-10-02T20:44:09.176291+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -21383,23 +21403,6 @@
       "samples": [
         {
           "latency_ms": 77.759,
-          "services": {
-            "gemini": true,
-            "telegram": true
-          },
-          "success": true,
-          "telegram_dc": true,
-          "throughput_mbps": 0.0,
-          "udp": true
-        }
-      ]
-    },
-    "8d830a53e55cbcaec55b147f": {
-      "endpoint": "172.67.160.183:443",
-      "last_seen": "2026-09-28T06:51:39.798323+00:00",
-      "samples": [
-        {
-          "latency_ms": 163.59099999999998,
           "services": {
             "gemini": true,
             "telegram": true
@@ -22543,6 +22546,16 @@
         }
       ]
     },
+    "9482570e0a5db8f9810a964c": {
+      "endpoint": "172.67.145.5:443",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
+      "samples": [
+        {
+          "latency_ms": null,
+          "success": false
+        }
+      ]
+    },
     "94bca386cd55224621eb3c68": {
       "endpoint": "104.16.154.133:443",
       "last_seen": "2026-09-29T20:46:19.850295+00:00",
@@ -22914,7 +22927,7 @@
     },
     "97e02a4f98896bc797e649b3": {
       "endpoint": "103.177.249.40:2083",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -23352,12 +23365,8 @@
     },
     "9abebfa8051121c4f95b0ae4": {
       "endpoint": "89.35.14.33:443",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
-        {
-          "latency_ms": 1187.529,
-          "success": true
-        },
         {
           "latency_ms": 1769.616,
           "success": true
@@ -23401,6 +23410,10 @@
         {
           "latency_ms": 906.134,
           "success": true
+        },
+        {
+          "latency_ms": null,
+          "success": false
         }
       ]
     },
@@ -23449,7 +23462,7 @@
     },
     "9aef1208515515c2f4e79147": {
       "endpoint": "103.31.4.189:443",
-      "last_seen": "2026-10-03T01:30:35.959443+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": 346.825,
@@ -23472,6 +23485,10 @@
           "telegram_dc": true,
           "throughput_mbps": 0.0,
           "udp": true
+        },
+        {
+          "latency_ms": null,
+          "success": false
         },
         {
           "latency_ms": null,
@@ -23753,16 +23770,6 @@
           "latency_ms": null,
           "success": false
         },
-        {
-          "latency_ms": null,
-          "success": false
-        }
-      ]
-    },
-    "9d657fec88e217de48a434fe": {
-      "endpoint": "104.19.35.216:443",
-      "last_seen": "2026-09-28T06:51:39.798323+00:00",
-      "samples": [
         {
           "latency_ms": null,
           "success": false
@@ -24344,60 +24351,6 @@
         }
       ]
     },
-    "a31c14ccecee7c561bef22c4": {
-      "endpoint": "89.35.14.30:443",
-      "last_seen": "2026-09-28T06:51:39.798323+00:00",
-      "samples": [
-        {
-          "latency_ms": 6706.013,
-          "success": false
-        },
-        {
-          "latency_ms": 1997.798,
-          "success": true
-        },
-        {
-          "latency_ms": 1374.468,
-          "success": true
-        },
-        {
-          "latency_ms": 1247.8519999999999,
-          "success": true
-        },
-        {
-          "latency_ms": 832.259,
-          "success": true
-        },
-        {
-          "latency_ms": 1049.626,
-          "success": true
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": 1145.528,
-          "success": true
-        },
-        {
-          "latency_ms": 1002.8919999999999,
-          "success": true
-        },
-        {
-          "latency_ms": 2182.507,
-          "success": true
-        },
-        {
-          "latency_ms": 1174.363,
-          "success": true
-        }
-      ]
-    },
     "a352511f57036c31ad31c493": {
       "endpoint": "188.114.97.6:443",
       "last_seen": "2026-10-03T12:32:09.578568+00:00",
@@ -24483,7 +24436,7 @@
     },
     "a3777df5d3dbbd62500029e5": {
       "endpoint": "188.114.97.6:443",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -24765,8 +24718,12 @@
     },
     "a56c1afa7a0a45e991714001": {
       "endpoint": "188.114.97.6:443",
-      "last_seen": "2026-10-02T08:29:53.827512+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
+        {
+          "latency_ms": null,
+          "success": false
+        },
         {
           "latency_ms": null,
           "success": false
@@ -24967,68 +24924,6 @@
         {
           "latency_ms": null,
           "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        }
-      ]
-    },
-    "a78b6f3c538625c908b0f4fb": {
-      "endpoint": "172.67.174.157:2083",
-      "last_seen": "2026-09-28T06:51:39.798323+00:00",
-      "samples": [
-        {
-          "latency_ms": 83.985,
-          "services": {
-            "gemini": true,
-            "telegram": true
-          },
-          "success": true,
-          "telegram_dc": true,
-          "throughput_mbps": 0.0,
-          "udp": true
-        },
-        {
-          "latency_ms": 95.558,
-          "services": {
-            "gemini": true,
-            "telegram": true
-          },
-          "success": true,
-          "telegram_dc": true,
-          "throughput_mbps": 0.0,
-          "udp": true
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": 120.569,
-          "services": {
-            "gemini": true,
-            "telegram": true
-          },
-          "success": true,
-          "telegram_dc": true,
-          "throughput_mbps": 0.0,
-          "udp": true
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": 78.351,
-          "services": {
-            "gemini": true,
-            "telegram": true
-          },
-          "success": true,
-          "telegram_dc": true,
-          "throughput_mbps": 0.0,
-          "udp": true
         },
         {
           "latency_ms": null,
@@ -25346,24 +25241,6 @@
         }
       ]
     },
-    "ab04749b310e2e220bb2e00f": {
-      "endpoint": "104.16.82.150:443",
-      "last_seen": "2026-09-28T06:51:39.798323+00:00",
-      "samples": [
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        }
-      ]
-    },
     "ac930f8ba7660a583525507d": {
       "endpoint": "104.17.169.13:443",
       "last_seen": "2026-10-01T08:53:59.364360+00:00",
@@ -25383,8 +25260,12 @@
     },
     "acd3aa66da4655085ea04d36": {
       "endpoint": "172.64.147.154:443",
-      "last_seen": "2026-09-30T13:41:28.694477+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
+        {
+          "latency_ms": null,
+          "success": false
+        },
         {
           "latency_ms": null,
           "success": false
@@ -25579,12 +25460,8 @@
     },
     "ae7c806d16a709206d2f2645": {
       "endpoint": "45.9.156.28:443",
-      "last_seen": "2026-10-01T21:49:51.436454+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
-        {
-          "latency_ms": 759.141,
-          "success": true
-        },
         {
           "latency_ms": 658.16,
           "services": {
@@ -25677,6 +25554,17 @@
         {
           "latency_ms": 659.597,
           "success": true
+        },
+        {
+          "latency_ms": 849.932,
+          "services": {
+            "gemini": false,
+            "telegram": true
+          },
+          "success": true,
+          "telegram_dc": true,
+          "throughput_mbps": 4.058408,
+          "udp": true
         }
       ]
     },
@@ -26025,12 +25913,8 @@
     },
     "b20d34cf8f1103de57d6c6b4": {
       "endpoint": "89.35.14.33:443",
-      "last_seen": "2026-10-03T06:30:49.630796+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
-        {
-          "latency_ms": 1071.4470000000001,
-          "success": true
-        },
         {
           "latency_ms": 2711.8269999999998,
           "success": true
@@ -26081,6 +25965,10 @@
         {
           "latency_ms": 872.165,
           "success": true
+        },
+        {
+          "latency_ms": 6742.7970000000005,
+          "success": false
         }
       ]
     },
@@ -26341,8 +26229,12 @@
     },
     "b4343acc4ed40ea8bc212a2e": {
       "endpoint": "144.31.243.186:443",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
+        {
+          "latency_ms": null,
+          "success": false
+        },
         {
           "latency_ms": null,
           "success": false
@@ -26364,28 +26256,6 @@
         {
           "latency_ms": 72.71600000000001,
           "success": true
-        }
-      ]
-    },
-    "b4bafb6acc1a49465f071dbe": {
-      "endpoint": "84.32.151.208:8443",
-      "last_seen": "2026-09-28T06:51:39.798323+00:00",
-      "samples": [
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
         }
       ]
     },
@@ -26502,60 +26372,6 @@
         }
       ]
     },
-    "b60613f60177784355be486c": {
-      "endpoint": "188.114.97.6:443",
-      "last_seen": "2026-09-28T06:51:39.798323+00:00",
-      "samples": [
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        },
-        {
-          "latency_ms": null,
-          "success": false
-        }
-      ]
-    },
     "b61fe30774c3317015d142c5": {
       "endpoint": "188.114.97.6:443",
       "last_seen": "2026-09-30T09:04:12.222116+00:00",
@@ -26604,7 +26420,7 @@
     },
     "b6be8ec730f40dc77857ca0a": {
       "endpoint": "104.21.8.201:2096",
-      "last_seen": "2026-10-03T00:29:18.039218+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -26658,12 +26474,8 @@
     },
     "b6d2bfbd5cdd485933203b34": {
       "endpoint": "89.35.14.33:443",
-      "last_seen": "2026-10-01T20:36:18.776304+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
-        {
-          "latency_ms": 1145.755,
-          "success": true
-        },
         {
           "latency_ms": 947.048,
           "success": true
@@ -26707,6 +26519,10 @@
         {
           "latency_ms": 1906.78,
           "success": true
+        },
+        {
+          "latency_ms": 6926.863,
+          "success": false
         }
       ]
     },
@@ -26917,12 +26733,8 @@
     },
     "b86f3cbc0c5b7405811e5eee": {
       "endpoint": "188.114.97.6:443",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
-        {
-          "latency_ms": 83.283,
-          "success": true
-        },
         {
           "latency_ms": null,
           "success": false
@@ -26966,6 +26778,10 @@
         {
           "latency_ms": null,
           "success": false
+        },
+        {
+          "latency_ms": null,
+          "success": false
         }
       ]
     },
@@ -26976,23 +26792,6 @@
         {
           "latency_ms": null,
           "success": false
-        }
-      ]
-    },
-    "b9660bfa706bb55b42fd6c9d": {
-      "endpoint": "172.67.134.136:443",
-      "last_seen": "2026-09-28T06:51:39.798323+00:00",
-      "samples": [
-        {
-          "latency_ms": 575.353,
-          "services": {
-            "gemini": true,
-            "telegram": true
-          },
-          "success": true,
-          "telegram_dc": true,
-          "throughput_mbps": 5.08524,
-          "udp": false
         }
       ]
     },
@@ -27182,7 +26981,7 @@
     },
     "ba34db2fda65f967e445dfbf": {
       "endpoint": "103.167.234.26:443",
-      "last_seen": "2026-10-03T01:30:35.959443+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -27555,6 +27354,16 @@
         }
       ]
     },
+    "bd6065bf564dcee95f6bee23": {
+      "endpoint": "188.114.97.6:443",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
+      "samples": [
+        {
+          "latency_ms": null,
+          "success": false
+        }
+      ]
+    },
     "bdb59d415dfb15538be5eeb7": {
       "endpoint": "172.67.68.248:2053",
       "last_seen": "2026-10-02T01:42:15.308223+00:00",
@@ -27864,6 +27673,23 @@
         }
       ]
     },
+    "bed4d44ce2689913313ead90": {
+      "endpoint": "185.252.177.1:443",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
+      "samples": [
+        {
+          "latency_ms": 814.118,
+          "services": {
+            "gemini": false,
+            "telegram": false
+          },
+          "success": true,
+          "telegram_dc": true,
+          "throughput_mbps": 4.794256,
+          "udp": true
+        }
+      ]
+    },
     "bf088753d694dc53652a286a": {
       "endpoint": "185.112.249.201:8443",
       "last_seen": "2026-09-30T16:08:14.771657+00:00",
@@ -27935,12 +27761,8 @@
     },
     "bf54a76387541d4caf3527ca": {
       "endpoint": "150.40.126.22:443",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
-        {
-          "latency_ms": 676.138,
-          "success": true
-        },
         {
           "latency_ms": 713.204,
           "success": true
@@ -27983,6 +27805,10 @@
         },
         {
           "latency_ms": 641.517,
+          "success": true
+        },
+        {
+          "latency_ms": 648.548,
           "success": true
         }
       ]
@@ -28247,7 +28073,7 @@
     },
     "c09c6b1f6474f48e8c544d7e": {
       "endpoint": "188.114.96.6:443",
-      "last_seen": "2026-10-03T01:30:35.959443+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -28750,6 +28576,45 @@
         }
       ]
     },
+    "c3850706fa42c54815b967dc": {
+      "endpoint": "104.16.111.193:443",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
+      "ru_probe": {
+        "cached": false,
+        "checked_at": 1791046196,
+        "measurement_id": "2CQD2yETS5kdHiVr900021FY1",
+        "ok": true,
+        "probe_count": 2,
+        "probes": [
+          {
+            "asn": 8359,
+            "city": "Novosibirsk",
+            "network": "MTS",
+            "reached": true
+          },
+          {
+            "asn": 12389,
+            "city": "Kostroma",
+            "network": "Rostelecom",
+            "reached": true
+          }
+        ],
+        "success_count": 2
+      },
+      "samples": [
+        {
+          "latency_ms": 1076.36,
+          "services": {
+            "gemini": true,
+            "telegram": true
+          },
+          "success": true,
+          "telegram_dc": true,
+          "throughput_mbps": 3.086312,
+          "udp": true
+        }
+      ]
+    },
     "c3c0bbc7f23ad929872023d6": {
       "endpoint": "188.114.97.6:443",
       "last_seen": "2026-09-28T15:25:30.030199+00:00",
@@ -29036,12 +28901,8 @@
     },
     "c7aca7ebacc7005b89a0ef39": {
       "endpoint": "45.9.156.24:443",
-      "last_seen": "2026-10-03T01:30:35.959443+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
-        {
-          "latency_ms": 630.495,
-          "success": true
-        },
         {
           "latency_ms": 898.0050000000001,
           "services": {
@@ -29098,6 +28959,10 @@
         },
         {
           "latency_ms": 690.838,
+          "success": true
+        },
+        {
+          "latency_ms": 665.633,
           "success": true
         }
       ]
@@ -29253,12 +29118,8 @@
     },
     "caf0fed1c6973b5d5d508e6a": {
       "endpoint": "188.114.97.6:443",
-      "last_seen": "2026-10-03T00:29:18.039218+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
-        {
-          "latency_ms": null,
-          "success": false
-        },
         {
           "latency_ms": null,
           "success": false
@@ -29302,6 +29163,10 @@
         {
           "latency_ms": 291.305,
           "success": true
+        },
+        {
+          "latency_ms": null,
+          "success": false
         }
       ]
     },
@@ -29321,7 +29186,7 @@
     },
     "cbaf019bc7836b12a620df6e": {
       "endpoint": "150.40.126.24:443",
-      "last_seen": "2026-10-03T06:30:49.630796+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": 961.429,
@@ -29329,6 +29194,10 @@
         },
         {
           "latency_ms": 661.587,
+          "success": true
+        },
+        {
+          "latency_ms": 668.145,
           "success": true
         }
       ]
@@ -29619,7 +29488,7 @@
     },
     "d0ab454b8c1f1313b0d34cc7": {
       "endpoint": "195.85.23.217:443",
-      "last_seen": "2026-10-03T06:30:49.630796+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -30922,7 +30791,7 @@
     },
     "d8681d40b32e2160f4b713f0": {
       "endpoint": "103.31.77.108:2053",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -31247,11 +31116,11 @@
     },
     "dac6e7e00b9367e148bb0bd5": {
       "endpoint": "188.114.97.6:443",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
-          "latency_ms": 93.712,
-          "success": true
+          "latency_ms": null,
+          "success": false
         },
         {
           "latency_ms": null,
@@ -31579,6 +31448,23 @@
         {
           "latency_ms": 686.499,
           "success": true
+        }
+      ]
+    },
+    "dcb9df4478a56142b9ccfa7b": {
+      "endpoint": "92.42.102.109:443",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
+      "samples": [
+        {
+          "latency_ms": 978.581,
+          "services": {
+            "gemini": false,
+            "telegram": false
+          },
+          "success": true,
+          "telegram_dc": true,
+          "throughput_mbps": 1.312,
+          "udp": false
         }
       ]
     },
@@ -32240,7 +32126,7 @@
     },
     "e26dee0a9a445ccbe4bf365b": {
       "endpoint": "188.114.97.6:443",
-      "last_seen": "2026-10-03T01:30:35.959443+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -32294,8 +32180,12 @@
     },
     "e29ab4139e92dedb463fd046": {
       "endpoint": "103.126.50.196:8443",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
+        {
+          "latency_ms": null,
+          "success": false
+        },
         {
           "latency_ms": null,
           "success": false
@@ -32404,12 +32294,8 @@
     },
     "e4509bf69ce724ca0ab50b9b": {
       "endpoint": "89.35.14.33:443",
-      "last_seen": "2026-10-03T00:29:18.039218+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
-        {
-          "latency_ms": null,
-          "success": false
-        },
         {
           "latency_ms": 1199.47,
           "success": true
@@ -32453,6 +32339,10 @@
         {
           "latency_ms": 1202.556,
           "success": true
+        },
+        {
+          "latency_ms": 6993.713,
+          "success": false
         }
       ]
     },
@@ -32994,6 +32884,16 @@
         }
       ]
     },
+    "e87a4f8a1ebc4fb654ce5f30": {
+      "endpoint": "206.1.103.51:18534",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
+      "samples": [
+        {
+          "latency_ms": null,
+          "success": false
+        }
+      ]
+    },
     "e8b3ed4686ec209e176f2fc3": {
       "endpoint": "142.228.52.79:8443",
       "last_seen": "2026-09-30T16:08:14.771657+00:00",
@@ -33093,7 +32993,7 @@
     },
     "e9effaf5403e6a401f323221": {
       "endpoint": "188.114.97.6:443",
-      "last_seen": "2026-10-03T06:30:49.630796+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -33673,11 +33573,11 @@
     },
     "ec20c9e5d886e4eb12b53820": {
       "endpoint": "91.107.191.188:8443",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "ru_probe": {
-        "cached": false,
-        "checked_at": 1790900327,
-        "measurement_id": "2tFMUKLhgHDw9Je9t00021Euo",
+        "cached": true,
+        "checked_at": 1791030739,
+        "measurement_id": "2m9sKNb2DfGSYf9Wf00021FTs",
         "ok": false,
         "probe_count": 2,
         "probes": [
@@ -33742,6 +33642,17 @@
         {
           "latency_ms": 590.565,
           "success": true
+        },
+        {
+          "latency_ms": 873.2990000000001,
+          "services": {
+            "gemini": true,
+            "telegram": true
+          },
+          "success": true,
+          "telegram_dc": true,
+          "throughput_mbps": 6.510976,
+          "udp": true
         }
       ]
     },
@@ -33982,7 +33893,7 @@
     },
     "efdc7c88c7d766ffd06db4e3": {
       "endpoint": "104.26.6.89:8443",
-      "last_seen": "2026-10-03T00:29:18.039218+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -34200,7 +34111,7 @@
     },
     "f06183f8b169aea0531a97e3": {
       "endpoint": "45.140.204.34:8443",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": 620.681,
@@ -34212,6 +34123,10 @@
           "telegram_dc": true,
           "throughput_mbps": 0.0,
           "udp": true
+        },
+        {
+          "latency_ms": null,
+          "success": false
         },
         {
           "latency_ms": null,
@@ -34518,7 +34433,7 @@
     },
     "f4a1d368826828ac39c028fa": {
       "endpoint": "188.114.97.6:443",
-      "last_seen": "2026-10-02T22:38:05.600032+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": 177.081,
@@ -34564,6 +34479,10 @@
         {
           "latency_ms": 238.18900000000002,
           "success": true
+        },
+        {
+          "latency_ms": null,
+          "success": false
         },
         {
           "latency_ms": null,
@@ -34692,7 +34611,7 @@
     },
     "f574cfc33a840639dab9c4b3": {
       "endpoint": "103.31.4.108:2087",
-      "last_seen": "2026-10-03T06:30:49.630796+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": null,
@@ -35671,6 +35590,16 @@
         }
       ]
     },
+    "fc13cfbed48057302ed2e773": {
+      "endpoint": "104.17.157.31:443",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
+      "samples": [
+        {
+          "latency_ms": null,
+          "success": false
+        }
+      ]
+    },
     "fc5a1a2173bc68082fbb7a4a": {
       "endpoint": "45.9.156.24:443",
       "last_seen": "2026-10-02T20:44:09.176291+00:00",
@@ -35897,7 +35826,7 @@
     },
     "fe9e959db2bd15d356b4debd": {
       "endpoint": "89.35.14.31:443",
-      "last_seen": "2026-10-03T12:32:09.578568+00:00",
+      "last_seen": "2026-10-03T16:49:50.571262+00:00",
       "samples": [
         {
           "latency_ms": 2472.832,
@@ -35949,6 +35878,10 @@
           "telegram_dc": true,
           "throughput_mbps": 3.308112,
           "udp": true
+        },
+        {
+          "latency_ms": null,
+          "success": false
         }
       ]
     },
